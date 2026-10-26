@@ -16,6 +16,7 @@ final class Config {
     static volatile boolean sendBoost = true;      // zombies this client simulates are sent more often
     static volatile boolean fixEating = true;      // only the owner decides that a zombie starts eating
     static volatile boolean followAttacks = true;  // a remote zombie attacks when (and as long as) the owner's does
+    static volatile boolean syncPlayers = true;    // other players are drawn on the zombies' clock (see Players)
 
     // owner side: the period follows the number of zombies we simulate, within this upload budget
     static volatile int sendIntervalMs = 50;       // vanilla: 200 ms when another player is near
@@ -37,6 +38,7 @@ final class Config {
     static volatile double jumpThreshold = 0.03;   // tiles; smaller differences are treated as motion
     static volatile double snapDistance = 4.0;     // tiles; larger errors snap instead of blending
     static volatile double blockedDistance = 1.0;  // tiles behind its pose (a fence, a wall in the way) ...
+    static volatile double stuckDistance = 0.35;   // ... or this far off it without moving at all ...
     static volatile double blockedMs = 600.0;      // ... for this long: put it on its pose
     static volatile double teleportDistance = 5.0;
     static volatile double maxSpeed = 12.0;        // tiles/s; faster sample-to-sample moves are teleports
@@ -74,7 +76,7 @@ final class Config {
 
     static String describe() {
         return "enabled=" + enabled + " sendBoost=" + sendBoost + " fixEating=" + fixEating + " followAttacks=" + followAttacks
-                + " sendIntervalMs=" + sendIntervalMs
+                + " syncPlayers=" + syncPlayers + " sendIntervalMs=" + sendIntervalMs
                 + " sendBudgetKBps=" + sendBudgetKBps + " mode=" + mode + " minDelayMs=" + minDelayMs + " maxDelayMs=" + maxDelayMs
                 + " maxExtrapolationMs=" + maxExtrapolationMs + " correctionTimeMs=" + correctionTimeMs;
     }
@@ -87,6 +89,7 @@ final class Config {
                 case "sendBoost": sendBoost = Boolean.parseBoolean(v); return true;
                 case "fixEating": fixEating = Boolean.parseBoolean(v); return true;
                 case "followAttacks": followAttacks = Boolean.parseBoolean(v); return true;
+                case "syncPlayers": syncPlayers = Boolean.parseBoolean(v); return true;
                 case "sendIntervalMs": sendIntervalMs = clampI(Integer.parseInt(v), 20, 200); return true;
                 case "sendBudgetKBps": sendBudgetKBps = clampI(Integer.parseInt(v), 8, 4096); return true;
                 case "mode":
@@ -112,7 +115,7 @@ final class Config {
     }
 
     private static final String[] KEYS = {
-        "enabled", "sendBoost", "fixEating", "followAttacks", "sendIntervalMs", "sendBudgetKBps", "mode", "minDelayMs", "maxDelayMs",
+        "enabled", "sendBoost", "fixEating", "followAttacks", "syncPlayers", "sendIntervalMs", "sendBudgetKBps", "mode", "minDelayMs", "maxDelayMs",
         "initialDelayMs", "maxExtrapolationMs", "idleTimeoutMs", "correctionTimeMs", "snapDistance", "logStats", "statsIntervalSec"
     };
 
@@ -122,6 +125,7 @@ final class Config {
             case "sendBoost": return String.valueOf(sendBoost);
             case "fixEating": return String.valueOf(fixEating);
             case "followAttacks": return String.valueOf(followAttacks);
+            case "syncPlayers": return String.valueOf(syncPlayers);
             case "sendIntervalMs": return String.valueOf(sendIntervalMs);
             case "sendBudgetKBps": return String.valueOf(sendBudgetKBps);
             case "mode": return mode;

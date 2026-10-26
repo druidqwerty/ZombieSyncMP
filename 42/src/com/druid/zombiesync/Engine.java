@@ -2,9 +2,11 @@ package com.druid.zombiesync;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.BiConsumer;
 import zombie.GameTime;
 import zombie.ai.State;
 import zombie.ai.states.AttackNetworkState;
@@ -29,23 +31,27 @@ import zombie.network.NetworkVariables;
 import zombie.network.packets.character.ZombiePacket;
 import zombie.network.packets.character.ZombieSynchronizationPacket;
 
-/** Glue between the game's zombie networking and {@link Track}. Everything runs on the main thread. */
+/**
+ * Glue between the game's zombie networking and {@link Track}. Everything runs on the main thread, except that the
+ * attack hooks are animation variables, which PZ Optimization may read from its worker threads; the maps they touch
+ * are synchronized for that.
+ */
 public final class Engine {
     static final String TAG = "[ZombieSync] ";
     static final long VANILLA_NEIGHBOR_PERIOD = 200L;
     static final int PACKET_BYTES = 53;
 
-    private static final Map<IsoZombie, Track> tracks = new WeakHashMap<>();
+    private static final Map<IsoZombie, Track> tracks = Collections.synchronizedMap(new WeakHashMap<>());
     /** remote zombies the owner told to eat (EatBody packet); any other eating on a remote zombie is ours to undo */
-    private static final Map<IsoZombie, Boolean> ownerEating = new WeakHashMap<>();
-    private static boolean failed;
+    private static final Map<IsoZombie, Boolean> ownerEating = Collections.synchronizedMap(new WeakHashMap<>());
+    private static volatile boolean failed;
 
     private static double frameNow = Double.NaN;
     private static long frameNanos;
 
     // owner side
     private static int ownedZombies;
-    private static long nextCountMs;
+    private static long nextCountMs, nextShareMs;
     private static long sendPeriod = VANILLA_NEIGHBOR_PERIOD;
     private static int stampedSent;
 
@@ -105,6 +111,7 @@ public final class Engine {
             log("    at " + e);
         }
         tracks.clear();
+        Players.clear();
         try {
             if (GameClient.instance != null && GameClient.instance.sendZombieTimer.getDelay() < VANILLA_NEIGHBOR_PERIOD) {
                 GameClient.instance.sendZombieTimer.setUpdatePeriod(VANILLA_NEIGHBOR_PERIOD);
@@ -125,7 +132,16 @@ public final class Engine {
         return GameTime.getServerTime() / 1.0e6;
     }
 
-    private static double now() {
+    /** Each remote zombie with its buffer (to share a clock with the player it chases). */
+    static void forEachTrack(BiConsumer<IsoZombie, Track> f) {
+        synchronized (tracks) {
+            for (Map.Entry<IsoZombie, Track> e : tracks.entrySet()) {
+                if (e.getKey() != null) f.accept(e.getKey(), e.getValue());
+            }
+        }
+    }
+
+    static double now() {
         if (Double.isNaN(frameNow) || System.nanoTime() - frameNanos > 50_000_000L) {
             return serverNowMs();
         }
@@ -141,13 +157,22 @@ public final class Engine {
             frameNanos = System.nanoTime();
             frameNow = GameTime.getServerTimeShiftIsSet() ? serverNowMs() : Double.NaN;
             if (!Config.enabled && !tracks.isEmpty()) tracks.clear();
+            if (!Config.enabled || !Config.syncPlayers) Players.clear();
             long ms = System.currentTimeMillis();
             if (ms >= nextCountMs) {
                 nextCountMs = ms + 1000L;
                 updateSendPeriod();
                 // zombie objects are pooled, so the weak map alone would keep buffers of long-gone zombies
-                tracks.values().removeIf(t -> ms - t.lastSeenMs > 30_000L);
+                synchronized (tracks) {
+                    tracks.values().removeIf(t -> ms - t.lastSeenMs > 30_000L);
+                }
+                Players.cleanup(ms);
             }
+            if (ms >= nextShareMs) {
+                nextShareMs = ms + 250L;
+                Players.shareClocks();
+            }
+            Players.frame(ms);
             if (Config.logStats) {
                 if (nextStatsMs == 0L) {
                     nextStatsMs = ms + Config.statsIntervalSec * 1000L;
@@ -224,9 +249,9 @@ public final class Engine {
                 tr = new Track();
                 tracks.put(z, tr);
             }
-            if (tr.zombieId != pkt.id) {
+            if (tr.netId != pkt.id) {
                 tr.clear(); // pooled zombie object reused for another zombie
-                tr.zombieId = pkt.id;
+                tr.netId = pkt.id;
             }
             boolean fresh = tr.n == 0 || tr.idle || !(now - tr.lastArrive <= Config.idleTimeoutMs);
             Sample smp = tr.obtain();
@@ -323,14 +348,8 @@ public final class Engine {
             }
             followAttackEnd(z);
             if (tr.get(now()) != Track.OK) return;
-            long wall = System.currentTimeMillis();
-            float err = (float) Math.hypot(z.getX() - tr.outX, z.getY() - tr.outY);
-            if (err > Config.blockedDistance) {
-                if (tr.blockedSince == 0L) tr.blockedSince = wall;
-            } else {
-                tr.blockedSince = 0L;
-            }
-            if (tr.blockedSince != 0L && wall - tr.blockedSince > Config.blockedMs) {
+            float zx = z.getX(), zy = z.getY();
+            if (heldOffPose(tr, zx, zy, (float) Math.hypot(zx - tr.outX, zy - tr.outY), System.currentTimeMillis())) {
                 // something on our side (a fence it climbed at the owner's, a corner it cut) keeps it from its
                 // pose; vanilla would teleport it to the corner of the tile after 3 tiles, we put it on the pose
                 z.setX(tr.outX);
@@ -338,7 +357,6 @@ public final class Engine {
                 z.setLastX(tr.outX);
                 z.setLastY(tr.outY);
                 z.setCurrentSquareFromPosition();
-                tr.blockedSince = 0L;
                 unstuck++;
             }
             z.setNextX(tr.outX);
@@ -356,6 +374,27 @@ public final class Engine {
         } catch (Throwable t) {
             fail("IsoZombie.postupdate", t);
         }
+    }
+
+    /**
+     * Held back from its pose for blockedMs: far behind it, or not moving at all while clearly off it (pressed into
+     * a wall corner the owner's character stands on the other side of; characters in a crowd keep shuffling, so they
+     * don't count). Called once per driven frame with where the character stands and how far that is from the pose.
+     */
+    static boolean heldOffPose(Track tr, float x, float y, float err, long wall) {
+        boolean still = Math.abs(x - tr.prevX) < 0.002f && Math.abs(y - tr.prevY) < 0.002f;
+        tr.prevX = x;
+        tr.prevY = y;
+        if (err > Config.blockedDistance || (still && err > Config.stuckDistance)) {
+            if (tr.blockedSince == 0L) tr.blockedSince = wall;
+        } else {
+            tr.blockedSince = 0L;
+        }
+        if (tr.blockedSince != 0L && wall - tr.blockedSince > Config.blockedMs) {
+            tr.blockedSince = 0L;
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -386,7 +425,7 @@ public final class Engine {
     public static boolean isFacingTarget(IsoZombie z, boolean vanilla) {
         if (vanilla || z == null || !Config.followAttacks || !receiverActive()) return vanilla;
         try {
-            if (!z.isRemoteZombie() || z.isBumped() || !ownerAttacking(z)) return vanilla;
+            if (!z.isRemoteZombie() || z.getTarget() == null || z.isBumped() || !ownerAttacking(z)) return vanilla;
             Track tr = tracks.get(z);
             return tr != null && tr.n > 0 && !tr.idle && drivesPose(z);
         } catch (Throwable t) {
@@ -464,6 +503,12 @@ public final class Engine {
 
     // ---------------------------------------------------------------- reporting
 
+    private static ArrayList<Track> trackList() {
+        synchronized (tracks) {
+            return new ArrayList<>(tracks.values());
+        }
+    }
+
     static String status() {
         StringBuilder sb = new StringBuilder();
         sb.append("ZombieSync: ").append(failed ? "FAILED (vanilla)" : (receiverActive() ? "active" : "idle")).append('\n');
@@ -473,7 +518,7 @@ public final class Engine {
         int active = 0, yielding = 0;
         double sumDelay = 0, sumAge = 0;
         int ageCount = 0;
-        for (Track t : new ArrayList<>(tracks.values())) {
+        for (Track t : trackList()) {
             if (t.n == 0 || t.idle) continue;
             active++;
             if (t.yielding) yielding++;
@@ -486,6 +531,7 @@ public final class Engine {
         }
         sb.append(String.format(Locale.ROOT, "remote: %d zombies followed (%d in a local animation), delay avg %.0f ms, packet age %.0f ms%n",
                 active, yielding, active > 0 ? sumDelay / active : 0.0, ageCount > 0 ? sumAge / ageCount : Double.NaN));
+        Players.status(sb);
         return sb.toString();
     }
 
@@ -493,7 +539,7 @@ public final class Engine {
         int n = 0, frames = 0, interp = 0, extrap = 0, hold = 0, corr = 0, snap = 0, samples = 0, stamped = 0, tele = 0, idle = 0;
         double sumDelay = 0, maxDelay = 0, maxCorr = 0, sumAge = 0;
         int ageCount = 0;
-        for (Track t : new ArrayList<>(tracks.values())) {
+        for (Track t : trackList()) {
             if (t.stFrames == 0 && t.stSamples == 0) continue;
             n++;
             frames += t.stFrames;
@@ -538,5 +584,6 @@ public final class Engine {
         staleEatCleared = 0;
         attacksEnded = 0;
         unstuck = 0;
+        Players.report(secs);
     }
 }

@@ -13,6 +13,7 @@ With ZombieSync:
 - between packets it follows a smooth curve; prediction misses are blended out with a spring, without jerks or teleports; walls and collisions work as usual;
 - it turns smoothly instead of snapping on every packet and faces where the owner's zombie faces, also while biting;
 - a remote zombie bites when its owner's zombie does, and starts eating only if its owner decided so;
+- other players near you are drawn on the same clock as the zombies: their position is sent 10 times a second (vanilla: on every new tile, 8-way turn or 0.6 s) and your copy of them follows the path they really walked, so a zombie bites the player you see, not the air ahead of them;
 - zombies you simulate are sent 4x more often (every 50 ms instead of 200), within an upload budget (64 KB/s by default; with a big horde the rate falls back toward vanilla).
 
 Falls, hits, climbing over fences and through windows, getting up are played with the game's own animations; the mod only records data during them and then picks the zombie up smoothly.
@@ -23,9 +24,10 @@ Client-side Java mod (requires ZombieBuddy). Every player must have it. If anyth
 
 Free and open source. Almost all of the code is written by an AI; the subscription, the testing and the time are mine. If the mod made your game better: [support on Boosty](https://boosty.to/lrgpp).
 
-## What's new in 1.0.1
-- Fixed: remote zombies faced the wrong way while biting (in 1.0.0 they turned toward your copy of the player, which can be tiles behind the real one). They now face where the owner's zombie faces: mean facing error 17.6° → 1.2°.
-- Fixed: a remote zombie no longer stands turning in place instead of biting; the bite starts together with the owner's.
+## What's new in 1.0.2
+- New: other players are drawn on the same clock as the zombies. In vanilla your copy of another player falls behind on every start, turn and change of speed and catches up slowly, but the zombies chasing them bite where the player really is, so on your screen they bite the air ahead of the player you see. Now a player's position is sent 10 times a second while another player is near, and your copy of them follows the path they really walked, with the same delay as the zombies chasing them. Live test: biting zombie to the player you see 1.61 → 0.56 tiles (p95 7.71 → 1.31), the same as on the zombies' owner (0.55). Climbing, falling, sitting, vehicles and grappling stay vanilla. Setting: `syncPlayers` (on by default).
+- Fixed: a remote zombie no longer stays pressed into a wall corner while its owner's zombie is already on the other side; after 0.6 s it is put back on its path (before, only when it fell more than 1 tile behind).
+- Compatibility: works with mods that run zombie animation code on worker threads, such as PZ Optimization. Live-tested together with PZ Optimization, AnimationTweaks and SmoothRide.
 
 ## Installation
 **Required on every client and in the server mod list.**
@@ -34,7 +36,7 @@ Steam Workshop: subscribe to [ZombieBuddy](https://steamcommunity.com/sharedfile
 
 Manual install:
 1. Install **ZombieBuddy** 2.3.4+.
-2. Download `ZombieSyncMP_1.0.1.zip` from [Releases](https://github.com/druidqwerty/ZombieSyncMP/releases) and unpack the `ZombieSyncMP` folder into `%UserProfile%\Zomboid\mods\`
+2. Download `ZombieSyncMP_1.0.2.zip` from [Releases](https://github.com/druidqwerty/ZombieSyncMP/releases) and unpack the `ZombieSyncMP` folder into `%UserProfile%\Zomboid\mods\`
    - You should see `... \mods\ZombieSyncMP\42\mod.info` and `... \42\media\java\ZombieSyncMP.jar`
 3. Add `ZombieSyncMP` to your server's `Mods=` list (after ZombieBuddy).
 
@@ -51,6 +53,7 @@ On first run a file is created: `%UserProfile%\Zomboid\ZombieSyncMP.properties`
 | `sendBoost` | `true` | send your zombies more often |
 | `fixEating` | `true` | remote zombies eat only when their owner says so |
 | `followAttacks` | `true` | a remote zombie attacks when (and as long as) its owner's copy does |
+| `syncPlayers` | `true` | other players are drawn on the zombies' clock (your position is sent 10 times a second while another player is near) |
 | `enabled` | `true` | `false` turns the mod off completely |
 
 Advanced: `minDelayMs`, `maxDelayMs`, `initialDelayMs`, `maxExtrapolationMs`, `idleTimeoutMs`, `correctionTimeMs`, `snapDistance`, `logStats`, `statsIntervalSec`. Delete the file to reset to defaults.
@@ -59,24 +62,34 @@ Advanced: `minDelayMs`, `maxDelayMs`, `initialDelayMs`, `maxExtrapolationMs`, `i
 `%UserProfile%\Zomboid\console.txt` has `[ZombieSync]` lines:
 - `loaded. ...` and `settings: ...` — the mod is active;
 - `owner: N zombies, send period 50 ms, ...` — zombies you simulate (every 30 s);
-- `remote: N zombies, ... delay avg 160 ...` — zombies other players simulate (every 30 s).
+- `remote: N zombies, ... delay avg 160 ...` — zombies other players simulate (every 30 s);
+- `players: N, ... delay avg ...` — other players the mod draws (every 30 s).
 
 In the debug Lua console:
 - `ZombieSync_status()` — state, delay, number of zombies
 - `ZombieSync_set("mode", "smooth")` — change a setting on the fly
 
 ## Live test
-Local dedicated server + two clients (zombie owner and observer), 16 zombies chasing the owner, 145 FPS. Vanilla and ZombieSync alternate every minute in the same session with the same zombies (version 1.0.1, 2026-10-27):
+Local dedicated server + two clients (zombie owner and observer), 16 zombies chasing the owner, 145 FPS, together with PZ Optimization, AnimationTweaks and SmoothRide. Vanilla and ZombieSync alternate every minute in the same session with the same zombies (version 1.0.2, 2026-10-27):
 
 | | vanilla | ZombieSync |
 |---|---|---|
-| zombie drawn behind real position | 340 ms | 175 ms |
-| mean position error | 0.81 tiles | 0.20 tiles |
-| position error p95 | 2.71 tiles | 0.66 tiles |
-| teleports | 267 | 0 |
-| pops per 1000 frames | 1.17 | 0.05 |
-| frozen frames per 1000 | 220 | 10 |
-| mean facing error | 45.0° | 1.2° |
+| zombie drawn behind real position | 340 ms | 185 ms |
+| mean position error | 0.79 tiles | 0.19 tiles |
+| position error p95 | 2.66 tiles | 0.56 tiles |
+| teleports | 225 | 0 |
+| pops per 1000 frames | 0.94 | 0.02 |
+| frozen frames per 1000 | 192 | 10 |
+| mean facing error | 46.7° | 1.0° |
+
+The other player, in a run where the owner walks, runs, sprints and stops like a player at the keyboard:
+
+| | vanilla | ZombieSync |
+|---|---|---|
+| your copy of the player drawn behind them | 110 ms (p95 480 ms) | 170 ms (p95 180 ms) |
+| biting zombie to the player you see | 1.61 tiles (p95 7.71) | 0.56 tiles (p95 1.31) |
+
+The copy is drawn on the same delay as the zombies around it, so on a straight walk it is a little further behind than in vanilla, but it no longer falls behind on starts and turns.
 
 ## Please note
 - This mod was made 100% with AI.
@@ -87,7 +100,7 @@ Local dedicated server + two clients (zombie owner and observer), 16 zombies cha
 Requires Java 25+ and the game + ZombieBuddy jars.
 
 ```
-JDK=/path/to/jdk-25/bin GAME=/path/to/ProjectZomboid MODVER=1.0.1 tools/build.sh
+JDK=/path/to/jdk-25/bin GAME=/path/to/ProjectZomboid MODVER=1.0.2 tools/build.sh
 ```
 
 The script builds `build/ZombieSyncMP.jar`, assembles the mod folder in `dist/ZombieSyncMP/` and runs the offline simulator (`test/`).

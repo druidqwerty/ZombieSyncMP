@@ -4,7 +4,7 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 
 /**
- * Snapshot buffer for one remote zombie.
+ * Snapshot buffer for one remote zombie (or another player, see Players).
  *
  * The zombie is drawn at renderTime = now - delay on the server clock, where the delay follows the
  * measured age of the owner's packets (stamped with the owner's send time) instead of chasing a
@@ -40,6 +40,8 @@ final class Track {
     double delay = -1.0;
     private double delayRate;
     double target = Config.initialDelayMs;
+    double own = Config.initialDelayMs; // the delay this buffer's own packets call for
+    private double shared;              // a longer delay shared with the characters it is drawn together with, 0 = none
     double lastNow = Double.NaN;
     double renderTime = Double.NaN;
     double lastArrive = Double.NaN;
@@ -48,7 +50,10 @@ final class Track {
     long lastSeenMs;  // wall clock of the last frame or packet for this zombie
     int floor;        // the owner's floor (z level) in the newest packet
     long blockedSince; // wall clock since the zombie could not reach its pose (a fence, a wall), 0 = not blocked
+    float prevX = Float.NaN, prevY = Float.NaN; // where the zombie stood at the previous driven frame
     boolean facingLocal; // facing comes from the game (turning to a target our side picked), not the buffer
+    long stampedMs;      // wall clock of the last packet that carried the owner's send time
+    boolean driving;     // the buffer placed the character this frame
     int lastMode = -1;
 
     // the next pose starts from where the zombie is drawn (activation, end of a local animation)
@@ -77,7 +82,7 @@ final class Track {
     int stFrames, stInterp, stExtrap, stHold, stCorr, stSnap, stSamples, stStamped, stTeleport, stDropped, stIdle;
     double stMaxCorr, stSumDelay, stMaxDelay;
 
-    short zombieId = -1;
+    short netId = -1; // the zombie's or player's online id the buffer belongs to (game objects are reused)
 
     Sample obtain() {
         Sample x = pool.poll();
@@ -105,6 +110,11 @@ final class Track {
         clearSamples();
         hasRaw = false;
         mMode = -1;
+        blockedSince = 0L;
+        prevX = prevY = Float.NaN;
+        stampedMs = 0L;
+        driving = false;
+        shared = 0.0;
         zeroCorrection();
         renderTime = Double.NaN;
         lastNow = Double.NaN;
@@ -259,7 +269,17 @@ final class Track {
             double g = gapN >= 4 ? percentile(gap, gapN, 0.5) : 100.0;
             t = p + Config.kGap() * g + Config.marginMs();
         }
-        target = Math.max(Config.minDelayMs, Math.min(Config.maxDelayMs, t));
+        own = Math.max(Config.minDelayMs, Math.min(Config.maxDelayMs, t));
+        target = Math.max(own, Math.min(Config.maxDelayMs, shared));
+    }
+
+    /**
+     * Draw at least this far behind (0: by its own packets only), so that characters drawn together (a player and
+     * the zombies chasing it) show the same moment. The delay still moves there at its limited rate.
+     */
+    void share(double delayMs) {
+        shared = delayMs;
+        target = Math.max(own, Math.min(Config.maxDelayMs, shared));
     }
 
     /** Computes this frame's pose into outX/outY/outDir. NONE: nothing to show, leave the zombie to vanilla. */

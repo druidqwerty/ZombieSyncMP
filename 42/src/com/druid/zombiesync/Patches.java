@@ -1,17 +1,48 @@
 package com.druid.zombiesync;
 
 import me.zed_0xff.zombie_buddy.Patch;
+import zombie.characters.IsoPlayer;
 import zombie.characters.IsoZombie;
 import zombie.characters.NetworkZombieAI;
 import zombie.iso.IsoMovingObject;
+import zombie.network.PacketTypes;
+import zombie.network.packets.character.PlayerPacket;
 import zombie.network.packets.character.ZombiePacket;
 import zombie.network.packets.character.ZombieSynchronizationPacket;
 
 /**
  * ZombieBuddy advice. The bodies are inlined into game classes, so they only call public methods of
- * {@link Engine}; all logic and error handling lives there.
+ * {@link Engine} and {@link Players}; all logic and error handling lives there.
  */
 public class Patches {
+
+    /** Owner side: every update of our own player that is about to be sent; carries the send time. */
+    @Patch(className = "zombie.network.packets.character.PlayerPacket", methodName = "set")
+    public static class PlayerSet {
+        @Patch.OnExit
+        public static void exit(@Patch.This PlayerPacket self, @Patch.Argument(0) IsoPlayer chr,
+                                @Patch.Return PacketTypes.PacketType ret) {
+            Players.afterPacketSet(self, chr, ret);
+        }
+    }
+
+    /** Receiver side: every update of another player. */
+    @Patch(className = "zombie.network.packets.character.PlayerPacket", methodName = "processClient")
+    public static class PlayerReceive {
+        @Patch.OnEnter
+        public static void enter(@Patch.This PlayerPacket self) {
+            Players.beforePacket(self);
+        }
+    }
+
+    /** Receiver side: where another player's copy moves this frame. */
+    @Patch(className = "zombie.characters.IsoPlayer", methodName = "postupdate")
+    public static class PlayerPostUpdate {
+        @Patch.OnEnter
+        public static void enter(@Patch.This IsoPlayer self) {
+            Players.beforePostUpdate(self);
+        }
+    }
 
     /** Once per frame on a multiplayer client. */
     @Patch(className = "zombie.vehicles.VehicleManager", methodName = "clientUpdate")
