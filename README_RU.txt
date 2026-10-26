@@ -99,6 +99,12 @@ Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=382794611
   «замерших» кадров на 1000              220          10
   средняя ошибка поворота                45,0°        1,2°
 
+Мои моды
+--------
+* SmoothRide MP — плавные машины в мультиплеере:
+  https://steamcommunity.com/sharedfiles/filedetails/?id=3827367565
+* ZombieSync MP — плавные зомби в мультиплеере (этот мод).
+
 Важно
 -----
 * Мод сделан на 100% с помощью ИИ.
