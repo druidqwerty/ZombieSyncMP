@@ -19,6 +19,10 @@ Falls, hits, climbing over fences and through windows, getting up are played wit
 
 Client-side Java mod (requires ZombieBuddy). Every player must have it. If anything goes wrong it switches itself off and vanilla sync is used (`[ZombieSync] disabled ...` in the log).
 
+<p align="center"><a href="https://boosty.to/lrgpp"><img src="docs/banner.png" alt="LrgPP mods on Boosty" width="640"></a></p>
+
+Free and open source. Almost all of the code is written by an AI; the subscription, the testing and the time are mine. If the mod made your game better: [support on Boosty](https://boosty.to/lrgpp).
+
 ## What's new in 1.0.1
 - Fixed: remote zombies faced the wrong way while biting (in 1.0.0 they turned toward your copy of the player, which can be tiles behind the real one). They now face where the owner's zombie faces: mean facing error 17.6° → 1.2°.
 - Fixed: a remote zombie no longer stands turning in place instead of biting; the bite starts together with the owner's.
