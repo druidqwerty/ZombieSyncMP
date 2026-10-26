@@ -88,6 +88,15 @@ public class Patches {
         }
     }
 
+    /** A remote zombie faces its target when its owner's zombie bites it, wherever our copy of the target is. */
+    @Patch(className = "zombie.characters.IsoZombie", methodName = "isFacingTarget")
+    public static class FacingTarget {
+        @Patch.OnExit
+        public static void exit(@Patch.This IsoZombie self, @Patch.Return(readOnly = false) boolean ret) {
+            ret = Engine.isFacingTarget(self, ret);
+        }
+    }
+
     /** Only the 3-argument overload: the 2-argument one forwards to it. */
     @Patch(className = "zombie.characters.IsoZombie", methodName = "setEatBodyTarget")
     public static class EatTarget {

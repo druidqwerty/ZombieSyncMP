@@ -343,9 +343,8 @@ public final class Engine {
             }
             z.setNextX(tr.outX);
             z.setNextY(tr.outY);
-            State st = z.getCurrentState();
-            if (st == ZombieFaceTargetState.instance() || st == AttackNetworkState.instance()) {
-                tr.facingLocal = true; // it turns to its target and bites: let the game aim it
+            if (aimsLocally(z)) {
+                tr.facingLocal = true; // it turns to a target it picked by itself: let the game aim it
             } else {
                 if (tr.facingLocal) {
                     tr.facingLocal = false;
@@ -376,6 +375,40 @@ public final class Engine {
             fail("IsoZombie.getShouldAttack", t);
             return vanilla;
         }
+    }
+
+    /**
+     * IsoZombie.isFacingTarget exit. A bite starts only when the zombie faces our copy of its target, but a
+     * remote zombie faces the way its owner's zombie does, at the real target, and our copy of a moving
+     * player can be tiles behind it. Without this the zombie stands turning toward the copy and never bites;
+     * letting the game aim it instead makes it bite the air behind itself.
+     */
+    public static boolean isFacingTarget(IsoZombie z, boolean vanilla) {
+        if (vanilla || z == null || !Config.followAttacks || !receiverActive()) return vanilla;
+        try {
+            if (!z.isRemoteZombie() || z.isBumped() || !ownerAttacking(z)) return vanilla;
+            Track tr = tracks.get(z);
+            return tr != null && tr.n > 0 && !tr.idle && drivesPose(z);
+        } catch (Throwable t) {
+            fail("IsoZombie.isFacingTarget", t);
+            return vanilla;
+        }
+    }
+
+    /** The owner's zombie is biting a player or hitting a vehicle, so it faces its target there. */
+    private static boolean ownerAttacking(IsoZombie z) {
+        return z.realState == NetworkVariables.ZombieState.Attack || z.realState == NetworkVariables.ZombieState.AttackVehicle;
+    }
+
+    /**
+     * The facing normally comes from the owner. The game aims the zombie only while it turns to a target our
+     * side picked by itself (the owner's zombie is not attacking), so that it can finish turning, and, with
+     * followAttacks off, while it bites on its own.
+     */
+    private static boolean aimsLocally(IsoZombie z) {
+        State st = z.getCurrentState();
+        if (!Config.followAttacks) return st == ZombieFaceTargetState.instance() || st == AttackNetworkState.instance();
+        return st == ZombieFaceTargetState.instance() && !ownerAttacking(z);
     }
 
     /** The owner's zombie stopped attacking: end ours too instead of finishing the bite in place. */

@@ -48,7 +48,7 @@ final class Track {
     long lastSeenMs;  // wall clock of the last frame or packet for this zombie
     int floor;        // the owner's floor (z level) in the newest packet
     long blockedSince; // wall clock since the zombie could not reach its pose (a fence, a wall), 0 = not blocked
-    boolean facingLocal; // facing comes from the game (turning to the target before a bite), not the buffer
+    boolean facingLocal; // facing comes from the game (turning to a target our side picked), not the buffer
     int lastMode = -1;
 
     // the next pose starts from where the zombie is drawn (activation, end of a local animation)
