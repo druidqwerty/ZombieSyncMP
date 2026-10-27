@@ -152,6 +152,13 @@ public final class Engine {
 
     /** VehicleManager.clientUpdate entry: once per frame in a multiplayer client. */
     public static void frame() {
+        if (!Config.profile) { frame0(); return; }
+        long t0 = System.nanoTime();
+        frame0();
+        Prof.FRAME.add(t0);
+    }
+
+    private static void frame0() {
         if (failed || !GameClient.client) return;
         try {
             frameNanos = System.nanoTime();
@@ -227,6 +234,13 @@ public final class Engine {
 
     /** ZombiePacket.set exit on the owner: stamp the send time into the facing angle. */
     public static void afterPacketSet(ZombiePacket pkt) {
+        if (!Config.profile) { afterPacketSet0(pkt); return; }
+        long t0 = System.nanoTime();
+        afterPacketSet0(pkt);
+        Prof.STAMP.add(t0);
+    }
+
+    private static void afterPacketSet0(ZombiePacket pkt) {
         if (pkt == null || GameServer.server || !senderActive()) return;
         try {
             pkt.dirAngleRads = Stamp.encode(pkt.dirAngleRads, serverNowMs(), pkt.id);
@@ -238,6 +252,13 @@ public final class Engine {
 
     /** NetworkZombieAI.parse entry: one owner update of a remote zombie. */
     public static void parseEnter(NetworkZombieAI ai, ZombiePacket pkt) {
+        if (!Config.profile) { parseEnter0(ai, pkt); return; }
+        long t0 = System.nanoTime();
+        parseEnter0(ai, pkt);
+        Prof.PARSE.add(t0);
+    }
+
+    private static void parseEnter0(NetworkZombieAI ai, ZombiePacket pkt) {
         parseAi = null;
         if (ai == null || pkt == null || !receiverActive()) return;
         try {
@@ -285,6 +306,13 @@ public final class Engine {
      * the buffer turns and moves it smoothly instead, and snaps by itself when the error is really large.
      */
     public static void parseExit(NetworkZombieAI ai) {
+        if (!Config.profile) { parseExit0(ai); return; }
+        long t0 = System.nanoTime();
+        parseExit0(ai);
+        Prof.PARSE.add(t0);
+    }
+
+    private static void parseExit0(NetworkZombieAI ai) {
         if (ai == null || ai != parseAi) return;
         parseAi = null;
         try {
@@ -323,6 +351,13 @@ public final class Engine {
 
     /** IsoZombie.postupdate entry: set where the zombie moves this frame (postupdate still resolves walls). */
     public static void beforePostUpdate(IsoZombie z) {
+        if (!Config.profile) { beforePostUpdate0(z); return; }
+        long t0 = System.nanoTime();
+        beforePostUpdate0(z);
+        Prof.POST.add(t0);
+    }
+
+    private static void beforePostUpdate0(IsoZombie z) {
         if (z == null || !receiverActive() || tracks.isEmpty()) return;
         try {
             Track tr = tracks.get(z);
@@ -404,6 +439,12 @@ public final class Engine {
      * update; the remote one attacks while that state is "attack".
      */
     public static boolean shouldAttack(IsoZombie z, boolean vanilla) {
+        if (!Config.profile) { return shouldAttack0(z, vanilla); }
+        long t0 = System.nanoTime();
+        try { return shouldAttack0(z, vanilla); } finally { Prof.ATTACK.add(t0); }
+    }
+
+    private static boolean shouldAttack0(IsoZombie z, boolean vanilla) {
         if (z == null || !Config.followAttacks || !receiverActive()) return vanilla;
         try {
             if (!z.isRemoteZombie() || z.getTarget() == null) return vanilla;
@@ -423,6 +464,12 @@ public final class Engine {
      * letting the game aim it instead makes it bite the air behind itself.
      */
     public static boolean isFacingTarget(IsoZombie z, boolean vanilla) {
+        if (!Config.profile) { return isFacingTarget0(z, vanilla); }
+        long t0 = System.nanoTime();
+        try { return isFacingTarget0(z, vanilla); } finally { Prof.ATTACK.add(t0); }
+    }
+
+    private static boolean isFacingTarget0(IsoZombie z, boolean vanilla) {
         if (vanilla || z == null || !Config.followAttacks || !receiverActive()) return vanilla;
         try {
             if (!z.isRemoteZombie() || z.getTarget() == null || z.isBumped() || !ownerAttacking(z)) return vanilla;
@@ -585,5 +632,6 @@ public final class Engine {
         attacksEnded = 0;
         unstuck = 0;
         Players.report(secs);
+        if (Config.profile) log(Prof.report(secs));
     }
 }

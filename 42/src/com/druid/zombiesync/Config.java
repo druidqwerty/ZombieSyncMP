@@ -18,9 +18,12 @@ final class Config {
     static volatile boolean followAttacks = true;  // a remote zombie attacks when (and as long as) the owner's does
     static volatile boolean syncPlayers = true;    // other players are drawn on the zombies' clock (see Players)
 
-    // owner side: the period follows the number of zombies we simulate, within this upload budget
+    // owner side: the period follows the number of zombies we simulate, within this upload budget.
+    // The server relays each zombie at ~10 Hz whatever we send, but 100 ms sends still cost ~30 ms of delay
+    // (the update waiting for the relay is older); 256 KB/s keeps 50 ms up to ~250 zombies (53 B per update),
+    // 64 KB/s gave vanilla's 200 ms from ~60 zombies on.
     static volatile int sendIntervalMs = 50;       // vanilla: 200 ms when another player is near
-    static volatile int sendBudgetKBps = 64;       // above it the period grows back toward vanilla
+    static volatile int sendBudgetKBps = 256;      // above it the period grows back toward vanilla
 
     // receiver side: delay = P(packet age) + k * packet gap + margin
     static volatile String mode = "balanced";      // smooth | balanced | realtime
@@ -46,6 +49,7 @@ final class Config {
 
     static volatile boolean logStats = true;
     static volatile int statsIntervalSec = 30;
+    static volatile boolean profile = false;      // CPU time per hook in the stats (see Prof)
 
     private Config() {
     }
@@ -106,6 +110,7 @@ final class Config {
                 case "correctionTimeMs": correctionTimeMs = clampD(Double.parseDouble(v), 10, 1000); return true;
                 case "snapDistance": snapDistance = clampD(Double.parseDouble(v), 1, 50); return true;
                 case "logStats": logStats = Boolean.parseBoolean(v); return true;
+                case "profile": profile = Boolean.parseBoolean(v); return true;
                 case "statsIntervalSec": statsIntervalSec = clampI(Integer.parseInt(v), 5, 600); return true;
                 default: return false;
             }
@@ -116,7 +121,7 @@ final class Config {
 
     private static final String[] KEYS = {
         "enabled", "sendBoost", "fixEating", "followAttacks", "syncPlayers", "sendIntervalMs", "sendBudgetKBps", "mode", "minDelayMs", "maxDelayMs",
-        "initialDelayMs", "maxExtrapolationMs", "idleTimeoutMs", "correctionTimeMs", "snapDistance", "logStats", "statsIntervalSec"
+        "initialDelayMs", "maxExtrapolationMs", "idleTimeoutMs", "correctionTimeMs", "snapDistance", "logStats", "statsIntervalSec", "profile"
     };
 
     private static String get(String key) {
@@ -137,6 +142,7 @@ final class Config {
             case "correctionTimeMs": return String.valueOf(correctionTimeMs);
             case "snapDistance": return String.valueOf(snapDistance);
             case "logStats": return String.valueOf(logStats);
+            case "profile": return String.valueOf(profile);
             case "statsIntervalSec": return String.valueOf(statsIntervalSec);
             default: return null;
         }

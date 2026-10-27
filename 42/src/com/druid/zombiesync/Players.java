@@ -120,6 +120,13 @@ public final class Players {
 
     /** PlayerPacket.processClient entry: one update of another player. */
     public static void beforePacket(PlayerPacket pkt) {
+        if (!Config.profile) { beforePacket0(pkt); return; }
+        long t0 = System.nanoTime();
+        beforePacket0(pkt);
+        Prof.PLAYER_PARSE.add(t0);
+    }
+
+    private static void beforePacket0(PlayerPacket pkt) {
         if (pkt == null || !active() || !Engine.receiverActive()) return;
         try {
             IsoPlayer p = pkt.id.getPlayer();
@@ -167,6 +174,13 @@ public final class Players {
 
     /** IsoPlayer.postupdate entry: where another player's copy moves this frame (postupdate still resolves walls). */
     public static void beforePostUpdate(IsoPlayer p) {
+        if (!Config.profile) { beforePostUpdate0(p); return; }
+        long t0 = System.nanoTime();
+        beforePostUpdate0(p);
+        Prof.PLAYER_POST.add(t0);
+    }
+
+    private static void beforePostUpdate0(IsoPlayer p) {
         if (p == null || tracks.isEmpty() || !active() || !Engine.receiverActive()) return;
         try {
             Track tr = tracks.get(p);
