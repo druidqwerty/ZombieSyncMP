@@ -194,7 +194,7 @@ public final class Players {
             // only a stream from an owner with the mod: stamped, and dense enough to draw from (vanilla's own
             // stream is a packet per tile, its copy is better left to vanilla)
             double gap = tr.sendGap();
-            boolean stream = wall - tr.stampedMs < 2000L && !(gap > 150.0);
+            boolean stream = wall - tr.stampedMs < (long) Config.idleTimeoutMs && !(gap > 150.0);
             if (!stream || !drivable(p) || (int) Math.floor(p.getZ()) != tr.floor) {
                 tr.driving = false;
                 if (!tr.yielding) {
@@ -223,8 +223,9 @@ public final class Players {
                 undoneTeleports++;
             }
             float err = (float) Math.hypot(px - tr.outX, py - tr.outY);
-            if (err > Config.snapDistance) {
-                // a teleport, or vanilla had it somewhere else entirely: postupdate would drag it there a tile per frame
+            if (err > Config.snapDistance || (tr.jumped && err > 1.0f)) {
+                // a teleport, a gap with no data, or vanilla had it somewhere else entirely: postupdate would drag it
+                // there a tile per frame
                 place(p, tr.outX, tr.outY);
                 tr.blockedSince = 0L;
                 placed++;

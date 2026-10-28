@@ -1,11 +1,11 @@
 name=ZombieSync MP [B42]
 id=ZombieSyncMP
 author=druid
-description=Smooth multiplayer zombies. Zombies another player is fighting are drawn along the path they really walked, about 0.15-0.2 s behind, instead of chasing an old guessed point and teleporting when they fall 3 tiles behind; they turn smoothly and face where they really face, also while biting, and they no longer sit "eating" a player who is standing. Other players near you are drawn on the same clock, so a zombie bites the player you see, not the air ahead of them. Zombies you simulate are sent twice as often (within an upload budget). Client-side Java (ZombieBuddy); every player needs it. If anything goes wrong it switches itself off and vanilla sync is used.
+description=Smooth multiplayer zombies. Zombies another player is fighting are drawn along the path they really walked, about 0.15-0.2 s behind, instead of chasing an old guessed point and teleporting when they fall 3 tiles behind; they turn smoothly and face where they really face, also while biting, and they no longer sit "eating" a player who is standing. Other players near you are drawn on the same clock, so a zombie bites the player you see, not the air ahead of them. Zombies you simulate are sent twice as often (within an upload budget). Lag spikes and server hitches (world save, map loading) are ridden out by slowing down instead of freezing and jumping. Settings: the host's sandbox options, page ZombieSync MP (an admin can change them in a running game). Client-side Java (ZombieBuddy); every player needs it. If anything goes wrong it switches itself off and vanilla sync is used.
 require=\ZombieBuddy
 category=mechanic
 versionMin=42.21
-modversion=1.0.3
+modversion=1.1.0
 javaJarFile=media/java/ZombieSyncMP.jar
 javaPkgName=com.druid.zombiesync
 ZBVersionMin=2.3.4

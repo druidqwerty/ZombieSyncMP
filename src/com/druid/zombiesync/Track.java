@@ -26,6 +26,9 @@ final class Track {
     static final int M_HOLD = 2;
     static final int M_FIRST = 3;
 
+    static final double SILENCE_MS = 600.0;       // no packet for this long: the next ones are a stall's backlog
+    static final double MAX_STAMP_AGE_MS = 3000.0; // a stamp reads right up to ~3070 ms (see Stamp)
+
     final Sample[] s = new Sample[CAP];
     int n;
     private final ArrayDeque<Sample> pool = new ArrayDeque<>();
@@ -36,6 +39,10 @@ final class Track {
     private int gapN, gapPos;
     private final double[] tmp = new double[48];
     private double newestT = Double.NEGATIVE_INFINITY;
+    private double restartT = Double.NEGATIVE_INFINITY; // the buffer jumped to this sample: older ones are skipped
+    private double silenceEnd = Double.NEGATIVE_INFINITY; // arrival that ended the last silence
+    private int stampedRun;          // accepted stamps in a row
+    private double stampShare = 0.5; // share of recent packets that decoded as stamped (an owner without the mod: ~0.02)
 
     double delay = -1.0;
     private double delayRate;
@@ -54,6 +61,7 @@ final class Track {
     boolean facingLocal; // facing comes from the game (turning to a target our side picked), not the buffer
     long stampedMs;      // wall clock of the last packet that carried the owner's send time
     boolean driving;     // the buffer placed the character this frame
+    boolean jumped;      // this frame's pose jumped instead of moving (a teleport, a gap with no data): place it there
     int lastMode = -1;
 
     // the next pose starts from where the zombie is drawn (activation, end of a local animation)
@@ -70,6 +78,7 @@ final class Track {
     private boolean hasRaw;
     private double rawTime;
     private float rpx, rpy, rvx, rvy, rdir;
+    private double rscale = 1.0; // how fast the drawn time ran then (1 - delay rate): raw velocity -> on-screen velocity
 
     // visual correction on top of the raw pose: offset + its velocity (spring), facing offset
     float cx, cy;
@@ -77,9 +86,12 @@ final class Track {
     float cdir;
 
     float outX, outY, outDir;
+    private boolean hasOut; // outX/outY hold last frame's pose
 
     // stats since the last report
     int stFrames, stInterp, stExtrap, stHold, stCorr, stSnap, stSamples, stStamped, stTeleport, stDropped, stIdle;
+    int stLate, stSlow, stGapSnap; // late packets; frames slowed because the buffer ran dry; jumps over long gaps
+    int stStale;                   // packets from before a jump over a gap, dropped
     double stMaxCorr, stSumDelay, stMaxDelay;
 
     short netId = -1; // the zombie's or player's online id the buffer belongs to (game objects are reused)
@@ -108,11 +120,17 @@ final class Track {
     /** Forget everything (zombie reused, ownership changed). */
     void clear() {
         clearSamples();
+        restartT = Double.NEGATIVE_INFINITY;
+        silenceEnd = Double.NEGATIVE_INFINITY;
+        lastArrive = Double.NaN;
+        hasOut = false;
         hasRaw = false;
         mMode = -1;
         blockedSince = 0L;
         prevX = prevY = Float.NaN;
         stampedMs = 0L;
+        stampedRun = 0;
+        stampShare = 0.5;
         driving = false;
         shared = 0.0;
         zeroCorrection();
@@ -121,6 +139,13 @@ final class Track {
         idle = false;
         blendPending = false;
         snapPending = false;
+    }
+
+    /** The drawn time starts over from the target delay (the curve is broken anyway). */
+    private void restartDelay() {
+        delay = -1.0;
+        delayRate = 0.0;
+        renderTime = Double.NaN;
     }
 
     private void zeroCorrection() {
@@ -156,31 +181,81 @@ final class Track {
             return false;
         }
         in.arrive = now;
-        if (in.stamped) {
+        // the first packets after a silence carry the backlog of a stall (network or server)
+        if (!Double.isNaN(lastArrive) && now - lastArrive > SILENCE_MS) silenceEnd = now;
+        boolean afterSilence = now - silenceEnd < 50.0;
+        // Stamps are trusted only in a stream that carries them (an owner with the mod): an unstamped angle still
+        // decodes as a stamp 1 time in 64, and such a stamp must neither place a sample nor count as an age. In a
+        // stamped stream an old stamp is a late packet (the network or the server stalled, then everything came at
+        // once): it keeps its real time. A stamp covers about 3 s (it wraps every 4096 ms): after a longer server
+        // stall the server first relays the packet queued at its start, whose stamp then reads as impossible.
+        // Re-timed as fresh it would put the old position after the new one (the zombie jumps back and forth),
+        // so in a stamped stream such a packet is dropped: the jump over that gap is made anyway.
+        boolean raw = in.stamped;
+        double shareBefore = stampShare;
+        stampShare += ((raw ? 1.0 : 0.0) - stampShare) * 0.25;
+        if (raw) {
             double a = now - in.t;
             double med = medianAge();
-            if (a < -250.0 || a > 2500.0 || (ageN >= 8 && Math.abs(a - med) > 400.0)) {
-                in.stamped = false; // a stamp that does not fit: garbage bits or a stale relay
+            boolean known = ageN >= 8;
+            boolean plausible = a <= MAX_STAMP_AGE_MS && a >= (known ? Math.max(-250.0, med - 200.0) : -250.0);
+            if (!plausible && afterSilence && shareBefore >= 0.5 && stampedRun >= 3) {
+                stStale++;
+                pool.add(in);
+                return false;
             }
+            boolean fits = !known || Math.abs(a - med) <= 400.0;
+            in.stamped = plausible && shareBefore >= 0.5 && (fits || stampedRun >= 3);
         }
+        stampedRun = in.stamped ? stampedRun + 1 : 0;
+        // samples arriving together or right after a silence tell about the stall, not about the usual latency and
+        // jitter that the delay is sized for; the stall itself is ridden out by slowing down (see get)
+        boolean burst = afterSilence || (!Double.isNaN(lastArrive) && now - lastArrive < 15.0);
         if (!in.stamped) {
             double med = medianAge();
             in.t = now - (Double.isNaN(med) ? defaultAge : med);
         }
-        if (n > 0) {
+        if (in.t < restartT - 0.5) {
+            // sent before the jump over a long gap (or a teleport): that part of the path was skipped, drawing it
+            // now would pull the zombie back
+            stStale++;
+            pool.add(in);
+            return false;
+        }
+        if (n > 0 && in.t < newestT - 0.5) {
+            // late: older than the newest snapshot; it still fills in the path unless it is behind the drawn time
+            stLate++;
+            if (!Double.isNaN(renderTime) && in.t < renderTime - 700.0) {
+                pool.add(in);
+                return false;
+            }
+        } else if (n > 0) {
             Sample last = s[n - 1];
             double dt = in.t - last.t;
             double d = Math.hypot(in.x - last.x, in.y - last.y);
-            if (d > Config.teleportDistance && (dt <= 0.0 || d * 1000.0 / dt > Config.maxSpeed)) {
-                clearSamples(); // teleport: show the new place at once
+            if (d > 1.0 && (dt <= 0.0 || d * 1000.0 / dt > Config.maxSpeed)) {
+                // faster than any zombie runs: a teleport (or the first packet after a stall longer than a stamp
+                // can tell); show the new place at once instead of dashing there
+                clearSamples();
+                restartT = in.t;
                 snapPending = true;
                 stTeleport++;
-            } else if (dt > Config.idleTimeoutMs) {
-                clearSamples(); // the stream stopped and resumed: old snapshots describe a different walk
+            } else if (dt > Config.maxDelayMs) {
+                // a gap longer than the slow motion can ride out (a world save, a long chunk load): one clean jump
+                // to the new place, and the delay starts over
+                clearSamples();
+                restartT = in.t;
+                if (d > 1.0) {
+                    snapPending = true;
+                    stGapSnap++;
+                }
+                restartDelay();
+            } else if (idle) {
+                restartDelay(); // the stream resumes after vanilla had the zombie
             }
         }
         if (in.stamped) {
-            pushAge(now - in.t);
+            if (!burst) pushAge(now - in.t);
             stStamped++;
         }
         if (newestT != Double.NEGATIVE_INFINITY && in.t > newestT && in.t - newestT < 1000.0) {
@@ -284,7 +359,10 @@ final class Track {
 
     /** Computes this frame's pose into outX/outY/outDir. NONE: nothing to show, leave the zombie to vanilla. */
     int get(double now) {
+        jumped = false;
         if (n == 0) return NONE;
+        float prevOutX = outX, prevOutY = outY;
+        boolean hadOut = hasOut;
 
         double dtFrame = Double.isNaN(lastNow) ? 0.0 : now - lastNow;
         if (dtFrame < 0.0) dtFrame = 0.0;
@@ -298,8 +376,28 @@ final class Track {
             delayRate = 0.0;
         } else {
             double want = (target - delay) / 700.0;
-            want = Math.max(-Config.delayShrinkRate, Math.min(Config.delayGrowRate, want));
-            double maxChange = Config.delayRateAccel * dtFrame / 1000.0;
+            double grow = Config.delayGrowRate;
+            // a large surplus (left by a stall, see below) is given back faster: up to 30% fast motion
+            double excess = delay - target;
+            double shrink = Config.delayShrinkRate + (excess > 100.0 ? Math.min(1.0, (excess - 100.0) / 400.0) * 0.24 : 0.0);
+            double accel = Config.delayRateAccel;
+            double over = Double.isNaN(renderTime) ? -1.0 : renderTime - newestT;
+            if (over > Config.starveMs) {
+                // the buffer ran dry: the network or the server stalled. Instead of predicting on, freezing at the
+                // prediction limit and jumping forward when the late packets come in, let the drawn time fall
+                // behind: the character slows down smoothly, coming to a stop at the prediction limit, and walks
+                // on along the real path once the packets arrive
+                double span = Math.max(1.0, Config.maxExtrapolationMs - Config.starveMs);
+                double slow = Math.min(1.0, (over - Config.starveMs) / span) * Config.starveSlowdown;
+                want = Math.max(want, slow);
+                grow = Math.max(grow, slow);
+                accel = 5.0;
+                stSlow++;
+            } else if (delayRate > Config.delayGrowRate) {
+                accel = 5.0; // the packets are back: leave the slow motion quickly
+            }
+            want = Math.max(-shrink, Math.min(grow, want));
+            double maxChange = accel * dtFrame / 1000.0;
             delayRate += Math.max(-maxChange, Math.min(maxChange, want - delayRate));
             delay += delayRate * dtFrame;
             if (delay < Config.minDelayMs) { delay = Config.minDelayMs; delayRate = 0.0; }
@@ -402,6 +500,7 @@ final class Track {
                     if (!idle) stIdle++;
                     idle = true;
                     hasRaw = false;
+                    hasOut = false;
                     mMode = -1;
                     zeroCorrection();
                     lastMode = M_HOLD;
@@ -457,6 +556,7 @@ final class Track {
             zeroCorrection();
             hasRaw = false;
             stSnap++;
+            jumped = true;
         }
         if (blendPending) {
             blendPending = false;
@@ -464,6 +564,7 @@ final class Track {
             if (Math.hypot(ex, ey) > Config.snapDistance) {
                 zeroCorrection();
                 stSnap++;
+                jumped = true;
             } else {
                 cx = ex;
                 cy = ey;
@@ -486,6 +587,7 @@ final class Track {
                     if (j > Config.snapDistance) {
                         zeroCorrection();
                         stSnap++;
+                        jumped = true;
                         foldVel = false;
                     } else {
                         cx += ex;
@@ -497,9 +599,13 @@ final class Track {
                         }
                     }
                 }
-                if (foldVel) {
-                    cvx += rvx - vx;
-                    cvy += rvy - vy;
+                if (foldVel && Math.hypot(rvx, rvy) <= Config.maxSpeed) {
+                    // keep the on-screen velocity: the raw velocities are per second of drawn time, which runs
+                    // slower or faster than real time while the delay changes (a segment faster than any zombie
+                    // runs was a jump, not motion: carrying that on would overshoot and spring back)
+                    double scale = 1.0 - delayRate;
+                    cvx += (float) (rvx * rscale - vx * scale);
+                    cvy += (float) (rvy * rscale - vy * scale);
                 }
             }
         }
@@ -507,6 +613,7 @@ final class Track {
         if (cl > Config.snapDistance) {
             zeroCorrection();
             stSnap++;
+            jumped = true;
             cl = 0f;
         }
         float cvl = (float) Math.hypot(cvx, cvy);
@@ -522,6 +629,7 @@ final class Track {
         rpy = py;
         rvx = vx;
         rvy = vy;
+        rscale = 1.0 - delayRate;
         rdir = dir;
         mMode = mode;
         mA = nA;
@@ -531,6 +639,10 @@ final class Track {
         outX = px + cx;
         outY = py + cy;
         outDir = (float) wrap(dir + cdir);
+        // more than a tile in one frame is a jump whatever caused it (the drawn time restarted after a gap, a snap):
+        // the caller places the character there instead of letting the game drag it a tile per frame
+        if (hadOut && Math.hypot(outX - prevOutX, outY - prevOutY) > 1.0) jumped = true;
+        hasOut = true;
 
         stFrames++;
         if (mode == M_INTERP) stInterp++;
@@ -545,6 +657,7 @@ final class Track {
 
     void resetStats() {
         stFrames = stInterp = stExtrap = stHold = stCorr = stSnap = stSamples = stStamped = stTeleport = stDropped = stIdle = 0;
+        stLate = stSlow = stGapSnap = stStale = 0;
         stMaxCorr = stSumDelay = stMaxDelay = 0.0;
     }
 

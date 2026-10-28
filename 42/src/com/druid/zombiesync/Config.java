@@ -28,7 +28,7 @@ final class Config {
     // receiver side: delay = P(packet age) + k * packet gap + margin
     static volatile String mode = "balanced";      // smooth | balanced | realtime
     static volatile double minDelayMs = 40.0;
-    static volatile double maxDelayMs = 600.0;
+    static volatile double maxDelayMs = 1500.0;    // a stall can push the delay this far (see starveMs)
     static volatile double initialDelayMs = 150.0;
     static volatile double delayGrowRate = 0.15;   // max ms of delay gained per ms (zombie runs 15% slow)
     static volatile double delayShrinkRate = 0.06; // max ms of delay lost per ms (zombie runs 6% fast)
@@ -36,14 +36,15 @@ final class Config {
     static volatile double unstampedAgeMs = 60.0;  // assumed age of packets without the owner's time stamp
 
     static volatile double maxExtrapolationMs = 200.0;
-    static volatile double idleTimeoutMs = 1200.0; // no packets for this long -> hand back to vanilla
+    static volatile double starveMs = 60.0;        // predicting this far past the newest packet: the buffer ran dry ...
+    static volatile double starveSlowdown = 1.0;   // ... and the drawn time slows down, to a stop at maxExtrapolationMs
+    static volatile double idleTimeoutMs = 4000.0; // no packets for this long -> hand back to vanilla (a stall of a few s is not)
     static volatile double correctionTimeMs = 180.0;
     static volatile double jumpThreshold = 0.03;   // tiles; smaller differences are treated as motion
     static volatile double snapDistance = 4.0;     // tiles; larger errors snap instead of blending
     static volatile double blockedDistance = 1.0;  // tiles behind its pose (a fence, a wall in the way) ...
     static volatile double stuckDistance = 0.35;   // ... or this far off it without moving at all ...
     static volatile double blockedMs = 600.0;      // ... for this long: put it on its pose
-    static volatile double teleportDistance = 5.0;
     static volatile double maxSpeed = 12.0;        // tiles/s; faster sample-to-sample moves are teleports
     static volatile double hermiteMaxDeviation = 0.35;
 
@@ -82,7 +83,7 @@ final class Config {
         return "enabled=" + enabled + " sendBoost=" + sendBoost + " fixEating=" + fixEating + " followAttacks=" + followAttacks
                 + " syncPlayers=" + syncPlayers + " sendIntervalMs=" + sendIntervalMs
                 + " sendBudgetKBps=" + sendBudgetKBps + " mode=" + mode + " minDelayMs=" + minDelayMs + " maxDelayMs=" + maxDelayMs
-                + " maxExtrapolationMs=" + maxExtrapolationMs + " correctionTimeMs=" + correctionTimeMs;
+                + " maxExtrapolationMs=" + maxExtrapolationMs + " idleTimeoutMs=" + idleTimeoutMs + " correctionTimeMs=" + correctionTimeMs;
     }
 
     static boolean set(String key, String value) {
@@ -102,10 +103,12 @@ final class Config {
                     mode = m;
                     return true;
                 case "minDelayMs": minDelayMs = clampD(Double.parseDouble(v), 0, 500); return true;
-                case "maxDelayMs": maxDelayMs = clampD(Double.parseDouble(v), 100, 2000); return true;
+                case "maxDelayMs": maxDelayMs = clampD(Double.parseDouble(v), 100, 4000); return true;
                 case "initialDelayMs": initialDelayMs = clampD(Double.parseDouble(v), 0, 1000); return true;
                 case "unstampedAgeMs": unstampedAgeMs = clampD(Double.parseDouble(v), 0, 1000); return true;
                 case "maxExtrapolationMs": maxExtrapolationMs = clampD(Double.parseDouble(v), 0, 600); return true;
+                case "starveMs": starveMs = clampD(Double.parseDouble(v), 0, 1000); return true;
+                case "starveSlowdown": starveSlowdown = clampD(Double.parseDouble(v), 0, 1); return true;
                 case "idleTimeoutMs": idleTimeoutMs = clampD(Double.parseDouble(v), 300, 10000); return true;
                 case "correctionTimeMs": correctionTimeMs = clampD(Double.parseDouble(v), 10, 1000); return true;
                 case "snapDistance": snapDistance = clampD(Double.parseDouble(v), 1, 50); return true;
@@ -121,10 +124,18 @@ final class Config {
 
     private static final String[] KEYS = {
         "enabled", "sendBoost", "fixEating", "followAttacks", "syncPlayers", "sendIntervalMs", "sendBudgetKBps", "mode", "minDelayMs", "maxDelayMs",
-        "initialDelayMs", "maxExtrapolationMs", "idleTimeoutMs", "correctionTimeMs", "snapDistance", "logStats", "statsIntervalSec", "profile"
+        "initialDelayMs", "maxExtrapolationMs", "starveMs", "starveSlowdown", "idleTimeoutMs", "correctionTimeMs", "snapDistance", "logStats", "statsIntervalSec", "profile"
     };
 
-    private static String get(String key) {
+    private static final java.util.Map<String, String> startup = new java.util.HashMap<>();
+
+    /** Remembers the values from the file / built-in defaults (Lua reads them as "startup.<key>"). */
+    static void snapshotStartup() {
+        for (String key : KEYS) startup.put(key, get(key));
+    }
+
+    static String get(String key) {
+        if (key.startsWith("startup.")) return startup.get(key.substring(8));
         switch (key) {
             case "enabled": return String.valueOf(enabled);
             case "sendBoost": return String.valueOf(sendBoost);
@@ -138,6 +149,8 @@ final class Config {
             case "maxDelayMs": return String.valueOf(maxDelayMs);
             case "initialDelayMs": return String.valueOf(initialDelayMs);
             case "maxExtrapolationMs": return String.valueOf(maxExtrapolationMs);
+            case "starveMs": return String.valueOf(starveMs);
+            case "starveSlowdown": return String.valueOf(starveSlowdown);
             case "idleTimeoutMs": return String.valueOf(idleTimeoutMs);
             case "correctionTimeMs": return String.valueOf(correctionTimeMs);
             case "snapDistance": return String.valueOf(snapDistance);
@@ -159,18 +172,53 @@ final class Config {
             }
             int applied = 0;
             StringBuilder bad = new StringBuilder();
+            // 1.0.x wrote every key with its default; values still at a 1.0.x default whose default changed in 1.1
+            // are dropped, so an old file does not pin the old behaviour (a 1.2 s data gap handed the zombie back to
+            // vanilla, which teleports it); customised values stay
+            boolean v1 = !p.containsKey("configVersion");
+            int upgraded = 0;
             for (String key : p.stringPropertyNames()) {
+                if (key.equals("configVersion")) continue;
+                if (v1 && isOldDefault(key, p.getProperty(key))) {
+                    upgraded++;
+                    continue;
+                }
                 if (set(key, p.getProperty(key))) {
                     applied++;
                 } else {
                     bad.append(' ').append(key);
                 }
             }
-            return "config " + file + ": " + applied + " value(s)" + (bad.length() > 0 ? ", ignored:" + bad : "");
+            String status = "config " + file + ": " + applied + " value(s)" + (bad.length() > 0 ? ", ignored:" + bad : "");
+            if (v1) status += "; " + write(file, "upgraded from 1.0 (" + upgraded + " old default(s) replaced)");
+            return status;
         }
+        return write(file, "created with defaults");
+    }
+
+    private static boolean isOldDefault(String key, String value) {
+        try {
+            double v = Double.parseDouble(value.trim());
+            switch (key) {
+                case "maxDelayMs": return v == 600.0;
+                case "idleTimeoutMs": return v == 1200.0;
+                default: return false;
+            }
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private static String write(File file, String what) {
         StringBuilder sb = new StringBuilder();
-        sb.append("# ZombieSync MP settings. Delete this file to restore defaults.\n");
-        sb.append("# mode: smooth (max smoothness, a bit more delay), balanced (default), realtime (min delay, more prediction)\n");
+        sb.append("# ZombieSync MP settings. Delete this file to restore defaults. Read once, when the game starts.\n");
+        sb.append("# Normally nothing here needs editing: on a server, enabled, mode, sendIntervalMs, sendBudgetKBps, maxDelayMs\n");
+        sb.append("# (= StallBufferMs), syncPlayers, followAttacks and fixEating come from the host's sandbox options (page\n");
+        sb.append("# ZombieSync MP, an admin can change them in a running game) and win over this file; logStats and statsIntervalSec\n");
+        sb.append("# are in the game's Options > Mods and win over this file. The rest is for tuning.\n");
+        sb.append("# mode: balanced (default: zombies ~0.2 s behind), smooth (30-50 ms more), realtime (lowest delay, more prediction)\n");
+        sb.append("# maxDelayMs: no packets (lag spike, server hitch) -> zombies slow down instead of freezing, up to this much delay\n");
+        sb.append("configVersion=2\n");
         for (String key : KEYS) {
             sb.append(key).append('=').append(get(key)).append('\n');
         }
@@ -180,7 +228,7 @@ final class Config {
             try (OutputStream out = new FileOutputStream(file)) {
                 out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
             }
-            return "config created with defaults: " + file;
+            return "config " + what + ": " + file;
         } catch (Exception e) {
             return "config not written (" + e + "), using defaults";
         }

@@ -4,7 +4,7 @@
 
 **Smooth multiplayer zombies for Project Zomboid (Build 42.21+)**
 
-> Status: tested on a local dedicated server with two clients, not yet on a public server.
+> Status: live-tested on a local dedicated server with two clients, also over an emulated internet connection like a friend's (lag spikes, packet loss) with server hitches; not yet in a full session on a public server.
 
 In vanilla B42, zombies that another player is fighting move in jerks on your screen: an update arrives every 0.2 s, the zombie walks toward an old guessed point, teleports (to the corner of a tile) when it falls 3 tiles behind, and snaps its head and body around on every packet. There is also a vanilla bug: if your copy of the other player lies on the ground for a moment, zombies on your screen sit down to "eat" them while the real zombies keep running, then jump into place.
 
@@ -14,6 +14,7 @@ With ZombieSync:
 - it turns smoothly instead of snapping on every packet and faces where the host's zombie faces, also while biting;
 - a remote zombie bites when its host's zombie does, and starts eating only if its host decided so;
 - other players near you are drawn on the same clock as the zombies: their position is sent 10 times a second (vanilla: on every new tile, 8-way turn or 0.6 s) and your copy of them follows the path they really walked, so a zombie bites the player you see, not the air ahead of them;
+- lag spikes and server hitches (world save, loading new map areas) are ridden out: zombies slow down and catch up afterwards instead of freezing and jumping; after a hitch longer than the buffer (1.5 s by default) each zombie makes one clean jump (new in 1.1.0);
 - zombies you simulate are sent 4x more often (every 50 ms instead of 200), within an upload budget (256 KB/s by default: the full rate up to ~250 zombies, then a gradually longer period).
 
 Falls, hits, climbing over fences and through windows, getting up are played with the game's own animations; the mod only records data during them and then picks the zombie up smoothly.
@@ -22,16 +23,21 @@ Client-side Java mod (requires ZombieBuddy). Every player must have it. If anyth
 
 <p align="center"><a href="https://boosty.to/lrgpp"><img src="docs/banner.png" alt="LrgPP mods on Boosty" width="640"></a></p>
 
-Free and open source. Almost all of the code is written by an AI; the subscription, the testing and the time are mine. If the mod made your game better: [support on Boosty](https://boosty.to/lrgpp).
+Free and open source. The code is written by an AI; the direction, the testing and the time are mine. If the mod made your game better: [support on Boosty](https://boosty.to/lrgpp).
+
+## What's new in 1.1.0
+- **Fixed: zombies teleporting back and forth for a player who joins over the internet.** Two causes in 1.0.3:
+  - after a server hitch the server first passes on the update that has been waiting since the hitch began (2.5–4 s old). 1.0.3 took it for a fresh one and drew the old position after the new one, so the zombie jumped back and then forward again;
+  - when updates stopped, the zombie froze after 0.2 s, was handed to vanilla after 1.2 s, and was dragged to its place at up to 20 tiles/s when updates resumed.
+
+  Now late updates keep their real time, updates too old to place are dropped, and a gap in the data is ridden out in slow motion (up to the lag-spike buffer, 1.5 s by default), with the time given back in slightly fast motion afterwards. After a longer hitch there is no data for that stretch at all, and each zombie makes one clean jump (1.0.3: several frames of dragging).
+- **Settings are now in the host's sandbox options** (page ZombieSync MP): the same for everyone and changeable in a running game. Options > Mods keeps only the personal stats switches. An old `ZombieSyncMP.properties` no longer pins the old timings: values still at the 1.0 defaults are replaced once.
+- NPCs that Project A-Life builds on zombie bodies are left to vanilla sync (their own client logic expects it).
+- The console shows the version: `[ZombieSync] loaded 1.1.0.`
 
 ## What's new in 1.0.3
-- Fixed: with a big horde the faster sending switched itself off. The default upload cap of 64 KB/s pushed the send period back to vanilla's 200 ms above ~60 zombies per host, and the buffer on such a sparse stream drew the zombies further behind than vanilla (485 ms vs 350 in a 300-zombie test). The cap is now 256 KB/s: the full 50 ms rate up to ~250 zombies, then a gradually longer period. 300 zombies now: drawn 180 ms behind (vanilla 260), mean error 0.12 tiles (0.20), teleports 0.
-- Load measured: the mod's hooks take under 2% of one core on a client with 300 remote zombies and under 0.3% on their host; nothing measurable at 16. New setting `profile=true` prints the CPU time of each hook with the stats.
-
-## What's new in 1.0.2
-- New: other players are drawn on the same clock as the zombies. In vanilla your copy of another player falls behind on every start, turn and change of speed and catches up slowly, but the zombies chasing them bite where the player really is, so on your screen they bite the air ahead of the player you see. Now a player's position is sent 10 times a second while another player is near, and your copy of them follows the path they really walked, with the same delay as the zombies chasing them. Live test: biting zombie to the player you see 1.61 → 0.56 tiles (p95 7.71 → 1.31), the same as on the zombies' host (0.55). Climbing, falling, sitting, vehicles and grappling stay vanilla. Setting: `syncPlayers` (on by default).
-- Fixed: a remote zombie no longer stays pressed into a wall corner while its host's zombie is already on the other side; after 0.6 s it is put back on its path (before, only when it fell more than 1 tile behind).
-- Compatibility: works with mods that run zombie animation code on worker threads, such as PZ Optimization. Live-tested together with PZ Optimization, AnimationTweaks and SmoothRide.
+- Fixed: with a big horde the faster sending switched itself off (the 64 KB/s upload cap fell back to vanilla's 200 ms above ~60 zombies per host). The cap is now 256 KB/s: the full 50 ms rate up to ~250 zombies, then a gradually longer period.
+- Load measured: the mod's hooks take under 2% of one core on a client with 300 remote zombies and under 0.3% on their host. Setting `profile=true` prints the CPU time of each hook with the stats.
 
 ## Installation
 **Required on every client and in the server mod list.**
@@ -40,76 +46,89 @@ Steam Workshop: subscribe to [ZombieBuddy](https://steamcommunity.com/sharedfile
 
 Manual install:
 1. Install **ZombieBuddy** 2.3.4+.
-2. Download `ZombieSyncMP_1.0.3.zip` from [Releases](https://github.com/druidqwerty/ZombieSyncMP/releases) and unpack the `ZombieSyncMP` folder into `%UserProfile%\Zomboid\mods\`
+2. Download `ZombieSyncMP_1.1.0.zip` from [Releases](https://github.com/druidqwerty/ZombieSyncMP/releases), delete the old `ZombieSyncMP` folder and unpack the new one into `%UserProfile%\Zomboid\mods\`
    - You should see `... \mods\ZombieSyncMP\42\mod.info` and `... \42\media\java\ZombieSyncMP.jar`
 3. Add `ZombieSyncMP` to your server's `Mods=` list (after ZombieBuddy).
 
-On first connection, ZombieBuddy asks for Java mod permission for ZombieSyncMP — allow it.
+ZombieBuddy asks once for Java mod permission for the new ZombieSyncMP jar — allow it (every player).
 
 ## Configuration
-On first run a file is created: `%UserProfile%\Zomboid\ZombieSyncMP.properties`
+**Server-wide (same for every player): the host's sandbox options, page ZombieSync MP.**
+Main menu: Host > Manage settings > Edit > Sandbox > ZombieSync MP (dedicated server: `SandboxVars.ZombieSyncMP` in `YourServer_SandboxVars.lua`).
+An admin can change them in a running game (Admin > Sandbox options); every client applies them within 2 s, no restart.
 
-| key | default | |
+| Option | Default | |
 |---|---|---|
-| `mode` | `balanced` | `smooth` — max smoothness (+30–50 ms delay), `realtime` — lowest delay, more prediction |
-| `sendIntervalMs` | `50` | how often your own zombies are sent (vanilla: 200) |
-| `sendBudgetKBps` | `256` | upload cap for zombie updates (≈250 zombies at 50 ms; above it the send period grows, up to vanilla's 200 ms) |
-| `sendBoost` | `true` | send your zombies more often |
-| `fixEating` | `true` | remote zombies eat only when their host says so |
-| `followAttacks` | `true` | a remote zombie attacks when (and as long as) its host's copy does |
-| `syncPlayers` | `true` | other players are drawn on the zombies' clock (your position is sent 10 times a second while another player is near) |
-| `enabled` | `true` | `false` turns the mod off completely |
+| Enable ZombieSync | on | off = vanilla zombie and player sync for everyone |
+| Smoothness mode | Balanced | Balanced: zombies ~0.2 s behind. Smooth: even smoother, 30–50 ms more. Realtime: the least delay, more prediction |
+| Zombie send interval, ms | 50 | how often a player sends the zombies his game simulates while another player is near; 200 = vanilla |
+| Zombie upload cap per player, KB/s | 256 | above it the interval grows back toward 200 ms (256 keeps 50 ms for ~250 zombies) |
+| Ride out lag spikes up to, ms | 1500 | how long a gap in the data zombies ride out by slowing down; after a longer one, one clean jump |
+| Draw players on the zombies' clock | on | players send their position 10 times a second while another player is near |
+| Attacks follow the simulating game | on | a remote zombie bites when (and as long as) it bites in its host's game |
+| Eating only when it eats in the simulating game | on | no more zombies "eating" a player who is standing |
 
-Advanced: `minDelayMs`, `maxDelayMs`, `initialDelayMs`, `maxExtrapolationMs`, `idleTimeoutMs`, `correctionTimeMs`, `snapDistance`, `logStats`, `statsIntervalSec`, `profile` (CPU time per hook in the stats). Delete the file to reset to defaults.
+**Personal: Options > Mods > ZombieSync MP** — only diagnostics: write stats to console.txt, stats interval.
+
+`%UserProfile%\Zomboid\ZombieSyncMP.properties` holds tuning values for testing (`minDelayMs`, `maxExtrapolationMs`, `idleTimeoutMs`, `correctionTimeMs`, `snapDistance`, `profile`, ...); normally nothing there needs editing (the server's values win over it).
 
 ## Is it working?
 `%UserProfile%\Zomboid\console.txt` has `[ZombieSync]` lines:
-- `loaded. ...` and `settings: ...` — the mod is active;
+- `loaded 1.1.0. ...` — the version that is installed;
+- `settings (server): ...` — the host's settings arrived (again after an admin changes them);
 - `owner: N zombies, send period 50 ms, ...` — zombies you simulate (every 30 s);
 - `remote: N zombies, ... delay avg 160 ...` — zombies other players simulate (every 30 s);
 - `players: N, ... delay avg ...` — other players the mod draws (every 30 s).
 
-In the debug Lua console:
-- `ZombieSync_status()` — state, delay, number of zombies
-- `ZombieSync_set("mode", "smooth")` — change a setting on the fly
+In the debug Lua console: `ZombieSync_status()` — state, delay, number of zombies.
 
 ## Live test
-Local dedicated server + two clients (zombie host and observer), 16 zombies chasing the host, 145 FPS, together with PZ Optimization, AnimationTweaks and SmoothRide. Vanilla and ZombieSync alternate every minute in the same session with the same zombies (version 1.0.3, 2026-10-27):
+Local dedicated server + two clients (zombie host and observer), 16 zombies chasing the host, who walks, runs and stops like a player at the keyboard, 145 FPS. Vanilla and the mod alternate every minute in the same session with the same zombies (2026-10-28).
 
-| | vanilla | ZombieSync |
-|---|---|---|
-| zombie drawn behind real position | 355 ms | 190 ms |
-| mean position error | 0.71 tiles | 0.18 tiles |
-| position error p95 | 2.60 tiles | 0.66 tiles |
-| teleports | 231 | 0 |
-| pops per 1000 frames | 1.11 | 0.08 |
-| frozen frames per 1000 | 163 | 8 |
-| mean facing error | 43.9° | 0.9° |
+Internet like a friend's (round trip ~130 ms ±30, 1.5% loss, lag spikes of 0.3–1 s every 10–30 s) plus server hitches of 0.3–3.8 s about every 25 s, lag-spike buffer 1.6 s:
 
-With 300 zombies on one host (the host at 60 FPS, the observer at 145): zombie drawn 180 ms behind (vanilla 260), mean position error 0.12 tiles (0.20), teleports 0 (0). The mod's hooks take 15 ms of CPU per second on the observer (1.5% of one core) and 2 ms/s on the host; the host uploads about 250 KB/s of zombie updates (`sendBudgetKBps` caps it).
+| | vanilla | 1.0.3 | 1.1.0 |
+|---|---|---|---|
+| zombie drawn behind real position | 310 ms | 225 ms | 225 ms |
+| mean position error | 0.51 tiles | 0.35 tiles | 0.39 tiles |
+| teleports after lag spikes | 8 | 2 | 0 |
+| teleports after server hitches | 40 | 14 | 45 * |
+| other teleports | 66 | 0 | 0 |
+| frames where a zombie is dragged (> 8 tiles/s) | 2151 | 1006 | 84 |
+| moving backwards, per 1000 frames | 1.98 | 1.90 | 0.58 |
+| biting zombie to the player you see | 1.38 tiles | 0.64 tiles | 0.65 tiles |
 
-The other player, in a run where the host walks, runs, sprints and stops like a player at the keyboard:
+\* All 45 after the 4 hitches longer than the buffer (1.9–3.8 s): one clean jump for each zombie that moved meanwhile. None after lag spikes or shorter hitches. 1.0.3 handed the zombies to vanilla instead (51 times) and dragged them back afterwards.
 
-| | vanilla | ZombieSync |
-|---|---|---|
-| your copy of the player drawn behind them | 110 ms (p95 480 ms) | 170 ms (p95 180 ms) |
-| biting zombie to the player you see | 1.61 tiles (p95 7.71) | 0.56 tiles (p95 1.31) |
+Normal connection (local, no lag):
 
-The copy is drawn on the same delay as the zombies around it, so on a straight walk it is a little further behind than in vanilla, but it no longer falls behind on starts and turns.
+| | vanilla | 1.0.3 | 1.1.0 |
+|---|---|---|---|
+| zombie drawn behind real position | 240 ms | 185 ms | 190 ms |
+| mean position error | 0.36 tiles | 0.20 tiles | 0.17 tiles |
+| teleports | 64 | 0 | 0 |
+| mean facing error | 5.6° | 1.2° | 2.0° |
+| biting zombie to the player you see | 1.24 tiles | 0.63 tiles | 0.56 tiles |
+
+With 300 zombies on one host: drawn 185 ms behind (vanilla 235), mean error 0.16 tiles (0.22); the mod's hooks take 1.4% of one core on the observer and 0.2% on the host. Together with PZ Optimization, AnimationTweaks, SmoothRide 1.1.0 and TrippingZombies the zombies the mod drives are as accurate as in 1.0.3's test (TrippingZombies: see Known issues).
+
+## Known issues
+- TrippingZombies: a zombie that this mod trips on the server falls only on the other players' screens; at the zombie's host it keeps running, and the copy lying on the ground is teleported every 3 tiles until it gets up. The same happens without ZombieSync.
+- A server hitch longer than the lag-spike buffer ends in one jump: there is no data for that time. The buffer can be raised (up to 4000 ms); zombies then stay further behind for a while after a long hitch.
 
 ## Please note
-- This mod was made 100% with AI.
+- The code is written by an AI, not by a human.
 - It was made only for playing with a friend.
-- Tested only on a dedicated server. Not tested on a server hosted from the game menu.
+- Live-tested on a local dedicated server, also with an emulated internet connection and server hitches. The 1.1.0 fixes come from the logs of a server hosted from the game menu, and the host's settings page was checked there; a full session with a friend on 1.1.0 is still to come.
 
 ## Building from Source
 Requires Java 25+ and the game + ZombieBuddy jars.
 
 ```
-JDK=/path/to/jdk-25/bin GAME=/path/to/ProjectZomboid MODVER=1.0.3 tools/build.sh
+JDK=/path/to/jdk-25/bin GAME=/path/to/ProjectZomboid MODVER=1.1.0 tools/build.sh
 ```
 
-The script builds `build/ZombieSyncMP.jar`, assembles the mod folder in `dist/ZombieSyncMP/` and runs the offline simulator (`test/`).
+The script builds `build/ZombieSyncMP.jar`, assembles the mod folder in `dist/ZombieSyncMP/` (with `42/mod.info` and `42/media`) and runs the offline simulator (`test/`: links from LAN to a bad one, lag spikes, server hitches with the server's stale-update behaviour).
 
 ## My mods
 - [SmoothRide MP](https://steamcommunity.com/sharedfiles/filedetails/?id=3827367565) — smooth multiplayer vehicles.

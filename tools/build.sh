@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 JDK="${JDK:-C:/Users/druid/.openclaw/workspace/_ext/jdk/jdk-25.0.4.1+1/bin}"
 GAME="${GAME:-G:/Steam/steamapps/common/ProjectZomboid}"
 CP="$GAME/projectzomboid.jar;$GAME/ZombieBuddy.jar"
-MODVER="${MODVER:-1.0.0}"
+MODVER="${MODVER:-1.1.0}"
 
 rm -rf build/classes build/sim
 mkdir -p build/classes build/sim
@@ -24,6 +24,8 @@ rm -rf dist/ZombieSyncMP
 mkdir -p dist/ZombieSyncMP/common dist/ZombieSyncMP/42/media/java
 cp build/ZombieSyncMP.jar dist/ZombieSyncMP/42/media/java/ZombieSyncMP.jar
 cp 42/mod.info dist/ZombieSyncMP/42/mod.info
+cp -r 42/media/lua dist/ZombieSyncMP/42/media/lua
+cp 42/media/sandbox-options.txt dist/ZombieSyncMP/42/media/sandbox-options.txt
 sed -i "s/^modversion=.*/modversion=$MODVER/" dist/ZombieSyncMP/42/mod.info
 [ -f 42/poster.png ] && cp 42/poster.png dist/ZombieSyncMP/42/poster.png
 mkdir -p dist/ZombieSyncMP/42/src

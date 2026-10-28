@@ -1,0 +1,22 @@
+{
+    "Sandbox_ZombieSyncMP": "ZombieSync MP",
+    "Sandbox_ZombieSyncMP_Enabled": "Enable ZombieSync",
+    "Sandbox_ZombieSyncMP_Enabled_tooltip": "Off: every player gets vanilla zombie and player sync. Each player needs the mod (client-side Java through ZombieBuddy). All settings on this page are the same for every player and apply at once, also when an admin changes them in a running game (Admin > Sandbox options).",
+    "Sandbox_ZombieSyncMP_Mode": "Smoothness mode",
+    "Sandbox_ZombieSyncMP_Mode_tooltip": "Same for every player. Balanced: zombies of other players are drawn about 0.2 s behind. Smooth: even smoother for 30-50 ms more. Realtime: the least delay, more prediction.",
+    "Sandbox_ZombieSyncMP_Mode_option1": "Balanced",
+    "Sandbox_ZombieSyncMP_Mode_option2": "Smooth",
+    "Sandbox_ZombieSyncMP_Mode_option3": "Realtime",
+    "Sandbox_ZombieSyncMP_SendIntervalMs": "Zombie send interval, ms",
+    "Sandbox_ZombieSyncMP_SendIntervalMs_tooltip": "How often a player sends the zombies his game simulates while another player is near: 50 = 20 times a second, 200 = vanilla (no boost). Shorter is smoother and costs upload.",
+    "Sandbox_ZombieSyncMP_SendBudgetKBps": "Zombie upload cap per player, KB/s",
+    "Sandbox_ZombieSyncMP_SendBudgetKBps_tooltip": "Above this the interval grows back toward 200 ms. 256 KB/s keeps 50 ms for about 250 zombies. Lower it for players with a slow upload.",
+    "Sandbox_ZombieSyncMP_StallBufferMs": "Ride out lag spikes up to, ms",
+    "Sandbox_ZombieSyncMP_StallBufferMs_tooltip": "When the connection or the server stalls (world save, loading new map areas), zombies and players slow down and catch up afterwards instead of freezing and jumping. This caps the extra delay; after a longer stall they make one clean jump. Lower: less delay after a spike, more jumps.",
+    "Sandbox_ZombieSyncMP_SyncPlayers": "Draw players on the zombies' clock",
+    "Sandbox_ZombieSyncMP_SyncPlayers_tooltip": "Players send their position 10 times a second while another player is near, so a zombie bites the player you see, not the air in front of him.",
+    "Sandbox_ZombieSyncMP_FollowAttacks": "Attacks follow the simulating game",
+    "Sandbox_ZombieSyncMP_FollowAttacks_tooltip": "A zombie that another player's game simulates bites when (and as long as) it bites there, not when your copy of its target happens to be close.",
+    "Sandbox_ZombieSyncMP_FixEating": "Eating only when it eats in the simulating game",
+    "Sandbox_ZombieSyncMP_FixEating_tooltip": "Such a zombie starts eating only when the game that simulates it says so: no more zombies 'eating' a player who is standing."
+}

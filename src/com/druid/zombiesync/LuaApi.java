@@ -2,11 +2,16 @@ package com.druid.zombiesync;
 
 import se.krka.kahlua.integration.annotations.LuaMethod;
 
-/** Console helpers: ZombieSync_status(), ZombieSync_set("mode", "smooth"). */
+/** Lua side: ZombieSync_status(), ZombieSync_get("mode"), ZombieSync_set("mode", "smooth"); the in-game options use get/set. */
 public class LuaApi {
     @LuaMethod(name = "ZombieSync_status", global = true)
     public static String status() {
         return Engine.status();
+    }
+
+    @LuaMethod(name = "ZombieSync_get", global = true)
+    public static String get(String key) {
+        return key == null ? null : Config.get(key);
     }
 
     @LuaMethod(name = "ZombieSync_set", global = true)

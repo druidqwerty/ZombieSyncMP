@@ -1,0 +1,22 @@
+{
+    "Sandbox_ZombieSyncMP": "ZombieSync MP",
+    "Sandbox_ZombieSyncMP_Enabled": "Включить ZombieSync",
+    "Sandbox_ZombieSyncMP_Enabled_tooltip": "Выкл.: у всех игроков ванильная синхронизация зомби и игроков. Мод нужен каждому игроку (Java через ZombieBuddy). Все настройки этой страницы одинаковы для всех игроков и применяются сразу, в том числе если админ меняет их в идущей игре (Админ > Настройки песочницы).",
+    "Sandbox_ZombieSyncMP_Mode": "Режим плавности",
+    "Sandbox_ZombieSyncMP_Mode_tooltip": "Одинаков для всех игроков. Balanced: чужие зомби рисуются примерно на 0,2 с позже. Smooth: ещё плавнее, но на 30-50 мс позже. Realtime: меньше всего задержка, больше предсказания.",
+    "Sandbox_ZombieSyncMP_Mode_option1": "Balanced",
+    "Sandbox_ZombieSyncMP_Mode_option2": "Smooth",
+    "Sandbox_ZombieSyncMP_Mode_option3": "Realtime",
+    "Sandbox_ZombieSyncMP_SendIntervalMs": "Как часто слать зомби, мс",
+    "Sandbox_ZombieSyncMP_SendIntervalMs_tooltip": "Как часто игра игрока отправляет зомби, которых она считает, пока рядом другой игрок: 50 = 20 раз в секунду, 200 = как в ванилле (без ускорения). Чаще - плавнее, но больше исходящий трафик.",
+    "Sandbox_ZombieSyncMP_SendBudgetKBps": "Потолок трафика на зомби у игрока, КБ/с",
+    "Sandbox_ZombieSyncMP_SendBudgetKBps_tooltip": "Выше потолка интервал растёт обратно к 200 мс. 256 КБ/с хватает на 50 мс примерно для 250 зомби. Уменьшите, если у кого-то слабый исходящий канал.",
+    "Sandbox_ZombieSyncMP_StallBufferMs": "Сглаживать лаги длиной до, мс",
+    "Sandbox_ZombieSyncMP_StallBufferMs_tooltip": "Когда связь или сервер подвисают (сохранение мира, подгрузка новых участков карты), зомби и игроки замедляются, а потом догоняют, а не замирают и не прыгают. Это предел добавочной задержки; после более долгого подвисания будет один чистый прыжок. Меньше - короче задержка после лага, но больше прыжков.",
+    "Sandbox_ZombieSyncMP_SyncPlayers": "Рисовать игроков по часам зомби",
+    "Sandbox_ZombieSyncMP_SyncPlayers_tooltip": "Игрок шлёт своё положение 10 раз в секунду, пока рядом другой игрок: зомби кусает того игрока, которого вы видите, а не воздух перед ним.",
+    "Sandbox_ZombieSyncMP_FollowAttacks": "Атаки как у того, кто считает зомби",
+    "Sandbox_ZombieSyncMP_FollowAttacks_tooltip": "Зомби, которого считает игра другого игрока, кусает тогда (и пока), когда кусает там, а не когда рядом оказалась ваша копия его цели.",
+    "Sandbox_ZombieSyncMP_FixEating": "Едят, только если едят у того, кто считает",
+    "Sandbox_ZombieSyncMP_FixEating_tooltip": "Такой зомби начинает есть, только если так решила игра, которая его считает: зомби больше не «едят» стоящего игрока."
+}

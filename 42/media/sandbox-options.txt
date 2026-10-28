@@ -1,0 +1,73 @@
+VERSION = 1,
+
+option ZombieSyncMP.Enabled
+{
+    type = boolean,
+    default = true,
+    page = ZombieSyncMP,
+    translation = ZombieSyncMP_Enabled,
+}
+
+option ZombieSyncMP.Mode
+{
+    type = enum,
+    numValues = 3,
+    default = 1,
+    page = ZombieSyncMP,
+    translation = ZombieSyncMP_Mode,
+    valueTranslation = ZombieSyncMP_Mode,
+}
+
+option ZombieSyncMP.SendIntervalMs
+{
+    type = integer,
+    default = 50,
+    min = 20,
+    max = 200,
+    page = ZombieSyncMP,
+    translation = ZombieSyncMP_SendIntervalMs,
+}
+
+option ZombieSyncMP.SendBudgetKBps
+{
+    type = integer,
+    default = 256,
+    min = 8,
+    max = 4096,
+    page = ZombieSyncMP,
+    translation = ZombieSyncMP_SendBudgetKBps,
+}
+
+option ZombieSyncMP.StallBufferMs
+{
+    type = integer,
+    default = 1500,
+    min = 300,
+    max = 4000,
+    page = ZombieSyncMP,
+    translation = ZombieSyncMP_StallBufferMs,
+}
+
+option ZombieSyncMP.SyncPlayers
+{
+    type = boolean,
+    default = true,
+    page = ZombieSyncMP,
+    translation = ZombieSyncMP_SyncPlayers,
+}
+
+option ZombieSyncMP.FollowAttacks
+{
+    type = boolean,
+    default = true,
+    page = ZombieSyncMP,
+    translation = ZombieSyncMP_FollowAttacks,
+}
+
+option ZombieSyncMP.FixEating
+{
+    type = boolean,
+    default = true,
+    page = ZombieSyncMP,
+    translation = ZombieSyncMP_FixEating,
+}

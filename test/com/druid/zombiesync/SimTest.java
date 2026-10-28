@@ -52,23 +52,54 @@ public final class SimTest {
     }
 
     static final class Result {
-        double errMean, errP95, lagMs, pops, maxStep;
-        int frames, snaps, teleports;
+        double errMean, errP95, lagMs, pops, maxStep, maxJump;
+        int frames, snaps, teleports, back, frozen, jumps, longStalls;
     }
+
+    /** The server relays a packet to the observer: loss, latency, jitter, and network stalls on the way. */
+    static void relay(Packet src, double at, Random rnd, double latency, double jitter, double loss,
+                      ArrayList<double[]> spikes, ArrayList<Packet> wire) {
+        if (rnd.nextDouble() < loss) return;
+        Packet k = new Packet();
+        k.x = src.x;
+        k.y = src.y;
+        k.dir = src.dir;
+        k.id = src.id;
+        k.arrive = at + latency * 0.5 + rnd.nextDouble() * jitter * 0.5;
+        for (double[] w : spikes) {
+            if (k.arrive >= w[0] && k.arrive < w[1]) k.arrive = w[1] + rnd.nextDouble() * 2.0;
+        }
+        wire.add(k);
+    }
+
+    /** Network stalls on the way to the observer (spikeEvery ms apart, spikeMin-spikeMax long) and server stalls. */
+    static double spikeEvery, spikeMin, spikeMax, stallEvery, stallMin, stallMax;
 
     static Result run(String label, long seed, double latency, double jitter, double loss, boolean stamped, boolean verbose) {
         Random rnd = new Random(seed);
+        // stall windows, planned up front: [start, end) pairs
+        ArrayList<double[]> spikes = new ArrayList<>(), stalls = new ArrayList<>();
+        Random srnd = new Random(seed * 31 + 5);
+        for (double t = 1500; spikeEvery > 0 && t < 19000; t += spikeEvery * (0.5 + srnd.nextDouble())) {
+            spikes.add(new double[]{t, t + spikeMin + srnd.nextDouble() * (spikeMax - spikeMin)});
+        }
+        for (double t = 2500; stallEvery > 0 && t < 19000; t += stallEvery * (0.5 + srnd.nextDouble())) {
+            stalls.add(new double[]{t, t + stallMin + srnd.nextDouble() * (stallMax - stallMin)});
+        }
         Track tr = new Track();
         ArrayDeque<Packet> inflight = new ArrayDeque<>();
         ArrayList<Packet> wire = new ArrayList<>();
         double sendEvery = 50, tickEvery = 100;
         double nextSend = 0, nextTick = 37, end = 20000;
         Packet pending = null;
+        boolean resumed = false;
+        int longStalls = 0, jumps = 0;
         double frameDt = 1000.0 / 144.0;
         ArrayList<Double> errs = new ArrayList<>();
         double prevX = Double.NaN, prevY = Double.NaN, prevTx = 0, prevTy = 0;
         int pops = 0;
-        double maxStep = 0;
+        double maxStep = 0, maxJump = 0;
+        int back = 0, frozen = 0;
         double sumLag = 0;
         int lagN = 0;
         int frames = 0;
@@ -86,22 +117,33 @@ public final class SimTest {
                 inflight.add(k);
                 nextSend += sendEvery + rnd.nextDouble() * 16.0; // frame-quantised timer
             }
-            // server keeps the newest and relays once per tick
-            while (!inflight.isEmpty() && inflight.peek().arrive <= nextTick) {
+            // server keeps the newest and relays once per tick; while its loop hangs nothing is processed, so the
+            // packet picked before the stall stays the pending one (it goes out first when the loop resumes)
+            boolean hanging = false;
+            for (double[] w : stalls) hanging |= now >= w[0] && now < w[1];
+            while (!hanging && !resumed && !inflight.isEmpty() && inflight.peek().arrive <= nextTick) {
                 pending = inflight.poll();
             }
             while (nextTick <= now) {
-                if (pending != null) {
-                    if (rnd.nextDouble() >= loss) {
-                        Packet k = new Packet();
-                        k.x = pending.x;
-                        k.y = pending.y;
-                        k.dir = pending.dir;
-                        k.id = pending.id;
-                        k.arrive = nextTick + latency * 0.5 + rnd.nextDouble() * jitter * 0.5;
-                        wire.add(k);
+                for (double[] w : stalls) {
+                    if (nextTick >= w[0] && nextTick < w[1]) { // the server loop hangs: no relay
+                        nextTick = w[1];
+                        resumed = true;
+                        if (w[1] - w[0] + tickEvery > Config.maxDelayMs) longStalls++; // the data gap is up to a tick longer
                     }
+                }
+                if (nextTick > now) break;
+                if (pending != null) {
+                    relay(pending, nextTick, rnd, latency, jitter, loss, spikes, wire);
                     pending = null;
+                }
+                if (resumed) {
+                    // as the real server does after a stall (live run 20261028_152358): the packet queued at the
+                    // stall's start goes out first (above), the newest one right after it
+                    resumed = false;
+                    Packet newest = null;
+                    while (!inflight.isEmpty() && inflight.peek().arrive <= nextTick) newest = inflight.poll();
+                    if (newest != null) relay(newest, nextTick + 1.0, rnd, latency, jitter, loss, spikes, wire);
                 }
                 while (!inflight.isEmpty() && inflight.peek().arrive <= nextTick + tickEvery) {
                     pending = inflight.poll();
@@ -152,8 +194,15 @@ public final class SimTest {
                 double[] tl = truth(now - tr.delay);
                 double step = Math.hypot(tr.outX - prevX, tr.outY - prevY);
                 double tstep = Math.hypot(tl[0] - prevTx, tl[1] - prevTy);
-                if (Math.abs(step - tstep) > 0.12 && !(now > 15900 && now < 16600)) pops++;
-                if (!(now > 15900 && now < 16600)) maxStep = Math.max(maxStep, step);
+                boolean tp = now > 15900 && now < 16600;
+                if (Math.abs(step - tstep) > 0.12 && !tp) pops++;
+                if (!tp) maxStep = Math.max(maxStep, step);
+                if (!tp && step > 1.0) jumps++;
+                if (!tp) maxJump = Math.max(maxJump, step - tstep);
+                // backward: the drawn zombie moves against the way the truth (as drawn, delayed) moves
+                double dot = (tr.outX - prevX) * (tl[0] - prevTx) + (tr.outY - prevY) * (tl[1] - prevTy);
+                if (!tp && tstep > 0.004 && step > 0.004 && dot < 0) back++;
+                if (!tp && tstep > 0.008 && step < 0.0005) frozen++;
                 prevTx = tl[0];
                 prevTy = tl[1];
             } else {
@@ -178,11 +227,17 @@ public final class SimTest {
         r.lagMs = lagN > 0 ? sumLag / lagN : Double.NaN;
         r.pops = pops;
         r.maxStep = maxStep;
+        r.maxJump = maxJump;
+        r.back = back;
+        r.frozen = frozen;
+        r.jumps = jumps;
+        r.longStalls = longStalls;
         r.frames = frames;
         r.snaps = tr.stSnap;
         r.teleports = tr.stTeleport;
-        System.out.printf("%-34s frames %5d  err %.3f p95 %.3f  lag %4.0f ms  pops %3d  max step %.3f  delay %.0f ms  teleports %d snaps %d%n",
-                label, r.frames, r.errMean, r.errP95, r.lagMs, pops, maxStep, tr.delay, tr.stTeleport, tr.stSnap);
+        System.out.printf("%-40s err %.3f p95 %.3f lag %4.0f pops %3d step %.3f jump %.3f back %3d frozen %4d delay %4.0f tele %d snap %d late %d gap %d stale %d jumps %d/%d long stalls%n",
+                label, r.errMean, r.errP95, r.lagMs, pops, maxStep, maxJump, back, frozen, tr.delay, tr.stTeleport, tr.stSnap,
+                tr.stLate, tr.stGapSnap, tr.stStale, jumps, longStalls);
         return r;
     }
 
@@ -215,11 +270,32 @@ public final class SimTest {
         Result b = run("internet 80 ms, jitter 30, 2% loss", 8, 80, 30, 0.02, true, false);
         Result c = run("owner without the mod (no stamps)", 9, 40, 20, 0.0, false, false);
         Result d = run("bad link 150 ms, jitter 80, 8% loss", 10, 150, 80, 0.08, true, false);
+        // friend over the internet: network stalls of 0.3-1 s (everything late arrives at once), server stalls
+        spikeEvery = 4000; spikeMin = 300; spikeMax = 1000;
+        Result e = run("WAN 110 ms + 0.3-1 s spikes", 12, 110, 30, 0.015, true, false);
+        spikeEvery = 0; stallEvery = 4000; stallMin = 300; stallMax = 800;
+        Result f = run("WAN 110 ms + 0.3-0.8 s server stalls", 13, 110, 30, 0.015, true, false);
+        stallEvery = 7000; stallMin = 2500; stallMax = 3800;
+        Result g = run("WAN 110 ms + 2.5-3.8 s server stalls", 14, 110, 30, 0.015, true, false);
+        // the live test's stall range, several seeds: stale packets older than a stamp can tell (> ~3 s) included
+        int gJumps = 0, gLong = 0, gBack = 0;
+        for (long seed = 21; seed <= 26; seed++) {
+            stallEvery = 5000; stallMin = 300; stallMax = 4500;
+            Result h = run("WAN 110 ms + 0.3-4.5 s server stalls #" + seed, seed, 110, 30, 0.015, true, false);
+            gJumps += h.jumps;
+            gLong += h.longStalls;
+            gBack += h.back;
+        }
+        stallEvery = 0;
         expect(a.errMean < 0.6 && a.pops == 0, "LAN: small error, no pops");
         expect(b.pops <= 2, "internet: no visible pops");
         expect(c.errMean < 1.0, "unstamped still follows");
         expect(d.maxStep < 0.6, "bad link: no frame moves more than 0.6 tiles");
         expect(a.teleports == 1 && b.teleports == 1, "the teleport is detected once");
+        expect(e.back <= 3 && e.maxJump < 0.25 && e.snaps <= 1, "WAN spikes: no backward motion, no jumps");
+        expect(f.back <= 3 && f.maxJump < 0.25 && f.snaps <= 1, "server stalls: no backward motion, no jumps");
+        expect(g.back <= 3 && g.jumps <= g.longStalls, "long server stalls: no backward motion, one clean jump each");
+        expect(gBack <= 6 && gJumps <= gLong, "0.3-4.5 s stalls: no backward motion, at most one jump per stall the buffer cannot ride out");
         System.out.println(failures == 0 ? "SimTest: all checks passed" : "SimTest: " + failures + " check(s) FAILED");
         if (failures != 0) System.exit(1);
     }

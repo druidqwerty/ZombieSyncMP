@@ -37,6 +37,7 @@ import zombie.network.packets.character.ZombieSynchronizationPacket;
  * are synchronized for that.
  */
 public final class Engine {
+    static final String VERSION = "1.1.0";
     static final String TAG = "[ZombieSync] ";
     static final long VANILLA_NEIGHBOR_PERIOD = 200L;
     static final int PACKET_BYTES = 53;
@@ -65,7 +66,7 @@ public final class Engine {
 
     // stats
     private static long nextStatsMs;
-    private static int undoneTeleports, yields;
+    private static int undoneTeleports, vanillaTeleports, yields, npcsLeft, placed;
 
     private Engine() {
     }
@@ -79,7 +80,8 @@ public final class Engine {
         } catch (Throwable t) {
             status = "config error: " + t;
         }
-        log("loaded. " + status);
+        Config.snapshotStartup();
+        log("loaded " + VERSION + ". " + status);
         log("settings: " + Config.describe());
     }
 
@@ -264,6 +266,10 @@ public final class Engine {
         try {
             IsoZombie z = ai.zombie;
             if (z == null) return;
+            if (foreignNpc(z)) {
+                if (!tracks.isEmpty() && tracks.remove(z) != null) npcsLeft++;
+                return;
+            }
             double now = serverNowMs();
             Track tr = tracks.get(z);
             if (tr == null) {
@@ -317,9 +323,13 @@ public final class Engine {
         parseAi = null;
         try {
             IsoZombie z = ai.zombie;
-            if (z == null || !drivesPose(z)) return;
-            z.setForwardDirection((float) Math.cos(parseDir), (float) Math.sin(parseDir));
+            if (z == null) return;
             float dx = z.getX() - parseX, dy = z.getY() - parseY;
+            if (!drivesPose(z)) {
+                if (dx * dx + dy * dy > 0.25f) vanillaTeleports++; // during a local animation vanilla's teleport stands
+                return;
+            }
+            z.setForwardDirection((float) Math.cos(parseDir), (float) Math.sin(parseDir));
             if (dx * dx + dy * dy > 0.25f && (int) Math.floor(z.getZ()) == (int) Math.floor(parseZ)) {
                 z.setX(parseX);
                 z.setY(parseY);
@@ -333,6 +343,20 @@ public final class Engine {
             }
         } catch (Throwable t) {
             fail("NetworkZombieAI.parse exit", t);
+        }
+    }
+
+    /**
+     * NPCs that another mod builds on zombie bodies (Project A-Life shells carry the animation variables ALifeActor
+     * and ALifeUID, on remote copies too): that mod runs its own client logic for them (aim, shots, animations),
+     * undelayed, so they stay with vanilla sync, which is what it was written for.
+     */
+    static boolean foreignNpc(IsoZombie z) {
+        try {
+            String uid = z.getVariableString("ALifeUID");
+            return (uid != null && !uid.isEmpty()) || z.getVariableBoolean("ALifeActor");
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 
@@ -384,14 +408,18 @@ public final class Engine {
             followAttackEnd(z);
             if (tr.get(now()) != Track.OK) return;
             float zx = z.getX(), zy = z.getY();
-            if (heldOffPose(tr, zx, zy, (float) Math.hypot(zx - tr.outX, zy - tr.outY), System.currentTimeMillis())) {
+            float err = (float) Math.hypot(zx - tr.outX, zy - tr.outY);
+            if (err > Config.snapDistance || (tr.jumped && err > 1.0f)) {
+                // the buffer jumped (a real teleport, or a stall too long to ride out): postupdate moves a character
+                // at most a tile per frame, so it would drag the zombie there over several frames, through whatever
+                // is in the way; one clean jump instead
+                place(z, tr.outX, tr.outY);
+                tr.blockedSince = 0L;
+                placed++;
+            } else if (heldOffPose(tr, zx, zy, err, System.currentTimeMillis())) {
                 // something on our side (a fence it climbed at the owner's, a corner it cut) keeps it from its
                 // pose; vanilla would teleport it to the corner of the tile after 3 tiles, we put it on the pose
-                z.setX(tr.outX);
-                z.setY(tr.outY);
-                z.setLastX(tr.outX);
-                z.setLastY(tr.outY);
-                z.setCurrentSquareFromPosition();
+                place(z, tr.outX, tr.outY);
                 unstuck++;
             }
             z.setNextX(tr.outX);
@@ -409,6 +437,14 @@ public final class Engine {
         } catch (Throwable t) {
             fail("IsoZombie.postupdate", t);
         }
+    }
+
+    private static void place(IsoZombie z, float x, float y) {
+        z.setX(x);
+        z.setY(y);
+        z.setLastX(x);
+        z.setLastY(y);
+        z.setCurrentSquareFromPosition();
     }
 
     /**
@@ -539,7 +575,7 @@ public final class Engine {
         }
         if (!Config.fixEating || !receiverActive()) return false;
         try {
-            if (!z.isRemoteZombie()) return false;
+            if (!z.isRemoteZombie() || foreignNpc(z)) return false;
             eatBlocked++;
             return true;
         } catch (Throwable t) {
@@ -558,7 +594,7 @@ public final class Engine {
 
     static String status() {
         StringBuilder sb = new StringBuilder();
-        sb.append("ZombieSync: ").append(failed ? "FAILED (vanilla)" : (receiverActive() ? "active" : "idle")).append('\n');
+        sb.append("ZombieSync ").append(VERSION).append(": ").append(failed ? "FAILED (vanilla)" : (receiverActive() ? "active" : "idle")).append('\n');
         sb.append(Config.describe()).append('\n');
         sb.append(String.format(Locale.ROOT, "owner: %d zombies simulated here, send period %d ms (timer %d ms)%n",
                 ownedZombies, sendPeriod, GameClient.instance != null ? GameClient.instance.sendZombieTimer.getDelay() : -1));
@@ -584,6 +620,7 @@ public final class Engine {
 
     private static void reportStats() {
         int n = 0, frames = 0, interp = 0, extrap = 0, hold = 0, corr = 0, snap = 0, samples = 0, stamped = 0, tele = 0, idle = 0;
+        int late = 0, slow = 0, gapSnap = 0, stale = 0;
         double sumDelay = 0, maxDelay = 0, maxCorr = 0, sumAge = 0;
         int ageCount = 0;
         for (Track t : trackList()) {
@@ -599,6 +636,10 @@ public final class Engine {
             stamped += t.stStamped;
             tele += t.stTeleport;
             idle += t.stIdle;
+            late += t.stLate;
+            slow += t.stSlow;
+            gapSnap += t.stGapSnap;
+            stale += t.stStale;
             sumDelay += t.stSumDelay;
             maxDelay = Math.max(maxDelay, t.stMaxDelay);
             maxCorr = Math.max(maxCorr, t.stMaxCorr);
@@ -620,13 +661,18 @@ public final class Engine {
             log(String.format(Locale.ROOT,
                     "remote: %d zombies, %d updates (%.0f%% stamped), age %.0f ms, delay avg %.0f max %.0f ms, frames %d "
                             + "(interp %.1f%%, predict %.1f%%, hold %.1f%%), corrections %d (max %.2f), snaps %d, teleports %d, "
-                            + "idle %d, local animations %d, vanilla teleports undone %d, local eating blocked %d (stopped %d), attacks ended %d, unstuck %d",
+                            + "idle %d, local animations %d, vanilla teleports undone %d (kept %d), local eating blocked %d (stopped %d), "
+                            + "attacks ended %d, unstuck %d, placed %d, late %d, slowed %.1f%%, long-gap jumps %d, stale dropped %d, npcs left to vanilla %d",
                     n, samples, samples > 0 ? 100.0 * stamped / samples : 0.0, ageCount > 0 ? sumAge / ageCount : Double.NaN,
                     sumDelay / f, maxDelay, frames, 100.0 * interp / f, 100.0 * extrap / f, 100.0 * hold / f,
-                    corr, maxCorr, snap, tele, idle, yields, undoneTeleports, eatBlocked, staleEatCleared, attacksEnded, unstuck));
+                    corr, maxCorr, snap, tele, idle, yields, undoneTeleports, vanillaTeleports, eatBlocked, staleEatCleared, attacksEnded,
+                    unstuck, placed, late, 100.0 * slow / f, gapSnap, stale, npcsLeft));
         }
         yields = 0;
         undoneTeleports = 0;
+        vanillaTeleports = 0;
+        npcsLeft = 0;
+        placed = 0;
         eatBlocked = 0;
         staleEatCleared = 0;
         attacksEnded = 0;

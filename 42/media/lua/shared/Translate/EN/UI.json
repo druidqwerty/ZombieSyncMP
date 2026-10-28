@@ -1,0 +1,7 @@
+{
+    "UI_ZS_Info": "Your personal settings (stats in console.txt). Everything that must be the same for all players (on/off, smoothness, send rate, upload cap, lag-spike buffer, players, attacks, eating) is in the host's sandbox options, page ZombieSync MP; an admin can change it in a running game (Admin > Sandbox options).",
+    "UI_ZS_NotLoaded": "The Java part of ZombieSync is not loaded (see ZombieBuddy); these settings take effect once it is.",
+    "UI_ZS_LogStats": "Write stats to console.txt",
+    "UI_ZS_LogStats_tt": "[ZombieSync] lines: delay, corrections, jumps, send rate. Useful when reporting a problem.",
+    "UI_ZS_StatsInterval": "Stats interval, seconds"
+}
