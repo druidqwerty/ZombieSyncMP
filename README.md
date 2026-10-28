@@ -113,7 +113,7 @@ Normal connection (local, no lag):
 With 300 zombies on one host: drawn 185 ms behind (vanilla 235), mean error 0.16 tiles (0.22); the mod's hooks take 1.4% of one core on the observer and 0.2% on the host. Together with PZ Optimization, AnimationTweaks, SmoothRide 1.1.0 and TrippingZombies the zombies the mod drives are as accurate as in 1.0.3's test (TrippingZombies: see Known issues).
 
 ## Known issues
-- TrippingZombies: a zombie that this mod trips on the server falls only on the other players' screens; at the zombie's host it keeps running, and the copy lying on the ground is teleported every 3 tiles until it gets up. The same happens without ZombieSync.
+- Tripping Zombies: in multiplayer every player's game rolls its own trips, so a zombie falls on one player's screen and keeps running on the other's, and a copy lying on the ground is teleported every 3 tiles until it gets up. The same happens without ZombieSync. Fixed by the add-on [Tripping Zombies MP Fix](https://steamcommunity.com/sharedfiles/filedetails/?id=3829034899): the trip is rolled once, by the game that runs the zombie, and every player sees the same fall.
 - A server hitch longer than the lag-spike buffer ends in one jump: there is no data for that time. The buffer can be raised (up to 4000 ms); zombies then stay further behind for a while after a long hitch.
 
 ## Please note
@@ -133,6 +133,7 @@ The script builds `build/ZombieSyncMP.jar`, assembles the mod folder in `dist/Zo
 ## My mods
 - [SmoothRide MP](https://steamcommunity.com/sharedfiles/filedetails/?id=3827367565) — smooth multiplayer vehicles.
 - **ZombieSync MP** — smooth multiplayer zombies (this mod).
+- [Tripping Zombies MP Fix](https://steamcommunity.com/sharedfiles/filedetails/?id=3829034899) — the same Tripping Zombies trips for every player.
 
 ## License
 MIT License — see LICENSE file.
