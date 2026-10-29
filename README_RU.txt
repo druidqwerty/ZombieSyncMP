@@ -203,7 +203,7 @@ TrippingZombies зомби, которых ведёт мод, так же точ
 * Wandering Hordes Performance Fix — без подвисаний сохранения и лагов клиента
   из-за Wandering Hordes:
   https://steamcommunity.com/sharedfiles/filedetails/?id=3829140377
-* Download Unstuck — лечит и ускоряет загрузку мастерской при запуске своего сервера:
+* Download Unstuck — лечит зависание загрузки мастерской при запуске своего сервера:
   https://steamcommunity.com/sharedfiles/filedetails/?id=3829163351
 
 Важно
