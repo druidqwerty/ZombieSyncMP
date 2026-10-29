@@ -61,7 +61,7 @@ An admin can change them in a running game (Admin > Sandbox options); every clie
 |---|---|---|
 | Enable ZombieSync | on | off = vanilla zombie and player sync for everyone |
 | Smoothness mode | Balanced | Balanced: zombies ~0.2 s behind. Smooth: even smoother, 30–50 ms more. Realtime: the least delay, more prediction |
-| Zombie send interval, ms | 50 | how often a player sends the zombies his game simulates while another player is near; 200 = vanilla |
+| Zombie send interval, ms | 50 | how often a player sends the zombies their game simulates while another player is near; 200 = vanilla |
 | Zombie upload cap per player, KB/s | 256 | above it the interval grows back toward 200 ms (256 keeps 50 ms for ~250 zombies) |
 | Ride out lag spikes up to, ms | 1500 | how long a gap in the data zombies ride out by slowing down; after a longer one, one clean jump |
 | Draw players on the zombies' clock | on | players send their position 10 times a second while another player is near |
