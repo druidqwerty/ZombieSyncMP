@@ -1,0 +1,22 @@
+{
+    "Sandbox_ZombieSyncMP": "ZombieSync MP",
+    "Sandbox_ZombieSyncMP_Enabled": "启用 ZombieSync",
+    "Sandbox_ZombieSyncMP_Enabled_tooltip": "关闭时：所有玩家使用原版僵尸与玩家同步。每位玩家均需安装本模组（通过 ZombieBuddy 加载客户端 Java）。本页所有设置对所有玩家相同并立即生效，管理员在运行中的游戏里修改时也会立即生效（管理面板 > 沙盒选项）。",
+    "Sandbox_ZombieSyncMP_Mode": "平滑模式",
+    "Sandbox_ZombieSyncMP_Mode_tooltip": "对所有玩家相同。均衡（Balanced）：其他玩家的僵尸画面延迟约 0.2 秒。平滑（Smooth）：更加顺滑，延迟增加 30-50 毫秒。实时（Realtime）：延迟最低，预测更多。",
+    "Sandbox_ZombieSyncMP_Mode_option1": "均衡 (Balanced)",
+    "Sandbox_ZombieSyncMP_Mode_option2": "平滑 (Smooth)",
+    "Sandbox_ZombieSyncMP_Mode_option3": "实时 (Realtime)",
+    "Sandbox_ZombieSyncMP_SendIntervalMs": "僵尸发送间隔（毫秒）",
+    "Sandbox_ZombieSyncMP_SendIntervalMs_tooltip": "当附近有其他玩家时，玩家客户端发送自己所模拟僵尸数据的间隔：50 = 每秒 20 次，200 = 原版（不加速）。间隔越短画面越平滑，但会占用更多上行带宽。",
+    "Sandbox_ZombieSyncMP_SendBudgetKBps": "每位玩家的僵尸上行带宽上限（KB/s）",
+    "Sandbox_ZombieSyncMP_SendBudgetKBps_tooltip": "超出此上限后，发送间隔会逐渐放宽回 200 毫秒。256 KB/s 可在约 250 只僵尸以内保持 50 毫秒间隔。如果玩家上行网速较慢，可调低此项。",
+    "Sandbox_ZombieSyncMP_StallBufferMs": "网络波动与卡顿缓冲上限（毫秒）",
+    "Sandbox_ZombieSyncMP_StallBufferMs_tooltip": "当网络连接或服务器出现卡顿（如保存世界、加载新地图区域）时，僵尸和玩家会先放慢动作并在之后平滑追上，而不是原地冻结再瞬移。此项限制最大额外延迟；若卡顿超过该时长，则只进行一次干净的位置跳转。调低：卡顿后延迟恢复更快，但跳转更多。",
+    "Sandbox_ZombieSyncMP_SyncPlayers": "按僵尸时钟同步绘制其他玩家",
+    "Sandbox_ZombieSyncMP_SyncPlayers_tooltip": "当附近有其他玩家时，玩家每秒发送 10 次自身位置，使僵尸啃咬的是你画面中看到的玩家位置，而不是他面前的空气。",
+    "Sandbox_ZombieSyncMP_FollowAttacks": "攻击动作跟随模拟端",
+    "Sandbox_ZombieSyncMP_FollowAttacks_tooltip": "由其他玩家客户端模拟的僵尸，仅在对方游戏中发起啃咬时（及持续期间）才进行啃咬，而不是根据你本地画面中目标副本的距离自行判定。",
+    "Sandbox_ZombieSyncMP_FixEating": "仅在模拟端判定进食时才进食",
+    "Sandbox_ZombieSyncMP_FixEating_tooltip": "此类僵尸仅在模拟它的客户端判定开始进食时才会进食：不会再出现僵尸蹲在地上“啃食”一名明明站着的玩家。"
+}

@@ -1,0 +1,7 @@
+{
+    "UI_ZS_Info": "你的个人设置（在 console.txt 中记录统计信息）。所有需要全服玩家一致的设置（开关、平滑模式、发送间隔、上行带宽上限、卡顿缓冲、玩家同步、攻击与进食判定）均位于主机的沙盒选项“ZombieSync MP”页面中；管理员可在运行中的游戏里直接修改（管理面板 > 沙盒选项）。",
+    "UI_ZS_NotLoaded": "ZombieSync 的 Java 组件尚未加载（请检查 ZombieBuddy）；加载后这些设置将生效。",
+    "UI_ZS_LogStats": "将统计信息写入 console.txt",
+    "UI_ZS_LogStats_tt": "输出 [ZombieSync] 日志行：延迟、修正、跳转、发送频率。反馈问题时非常有用。",
+    "UI_ZS_StatsInterval": "统计输出间隔（秒）"
+}

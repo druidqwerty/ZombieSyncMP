@@ -25,6 +25,11 @@ Client-side Java mod (requires ZombieBuddy). Every player must have it. If anyth
 
 Free and open source. The code is written by an AI; the direction, the testing and the time are mine. If the mod made your game better: [support on Boosty](https://boosty.to/lrgpp).
 
+## What's new in 1.1.1
+- **Chinese localization (`CN` Simplified Chinese & `CH` Traditional Chinese)** for all in-game settings and tooltips: Host > Sandbox > ZombieSync MP and Options > Mods > ZombieSync MP, plus `README_CN.txt` and Chinese Steam Workshop pages.
+- Fixed the in-game mod description in `42/mod.info` ("sent 4x more often" to match the 50 ms default vs vanilla's 200 ms).
+- `ZombieSyncMP.jar` is unchanged from 1.1.0 (`sha256: 53550c20...`), so ZombieBuddy does not prompt existing players to re-approve the Java mod.
+
 ## What's new in 1.1.0
 - **Fixed: zombies teleporting back and forth for a player who joins over the internet.** Two causes in 1.0.3:
   - after a server hitch the server first passes on the update that has been waiting since the hitch began (2.5–4 s old). 1.0.3 took it for a fresh one and drew the old position after the new one, so the zombie jumped back and then forward again;
@@ -46,7 +51,7 @@ Steam Workshop: subscribe to [ZombieBuddy](https://steamcommunity.com/sharedfile
 
 Manual install:
 1. Install **ZombieBuddy** 2.3.4+.
-2. Download `ZombieSyncMP_1.1.0.zip` from [Releases](https://github.com/druidqwerty/ZombieSyncMP/releases), delete the old `ZombieSyncMP` folder and unpack the new one into `%UserProfile%\Zomboid\mods\`
+2. Download `ZombieSyncMP_1.1.1.zip` from [Releases](https://github.com/druidqwerty/ZombieSyncMP/releases), delete the old `ZombieSyncMP` folder and unpack the new one into `%UserProfile%\Zomboid\mods\`
    - You should see `... \mods\ZombieSyncMP\42\mod.info` and `... \42\media\java\ZombieSyncMP.jar`
 3. Add `ZombieSyncMP` to your server's `Mods=` list (after ZombieBuddy).
 
@@ -136,7 +141,8 @@ The script builds `build/ZombieSyncMP.jar`, assembles the mod folder in `dist/Zo
 - [Tripping Zombies MP Fix](https://steamcommunity.com/sharedfiles/filedetails/?id=3829034899) — the same Tripping Zombies trips for every player.
 - [Wandering Hordes Performance Fix](https://steamcommunity.com/sharedfiles/filedetails/?id=3829140377) — no save freezes and no client lag from Wandering Hordes.
 - [Download Unstuck](https://steamcommunity.com/sharedfiles/filedetails/?id=3829163351) — un-sticks the Workshop download when hosting from the menu.
-- [A-Life: Reactive Survivors](https://steamcommunity.com/sharedfiles/filedetails/?id=3829332775) — A-Life NPCs fight back before the bite (test version).
+- [A-Life: Reactive Survivors](https://steamcommunity.com/sharedfiles/filedetails/?id=3829332775) — A-Life NPCs fight back before the bite.
+- [A-Life: Caravans](https://steamcommunity.com/sharedfiles/filedetails/?id=3829571361) — living faction convoys and roadside trade for Project A-Life.
 
 ## License
 MIT License — see LICENSE file.
@@ -145,3 +151,5 @@ MIT License — see LICENSE file.
 [druidqwerty](https://github.com/druidqwerty)
 
 For questions or issues, open a GitHub issue.
+
+© 2026 druidqwerty. MIT License.

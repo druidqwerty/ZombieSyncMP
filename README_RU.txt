@@ -1,6 +1,6 @@
 ZombieSync MP [B42] — плавные зомби в мультиплеере
 ====================================================
-Версия 1.1.0. Исходный код (MIT): https://github.com/druidqwerty/ZombieSyncMP
+Версия 1.1.1. Исходный код (MIT): https://github.com/druidqwerty/ZombieSyncMP
 Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=3827946115
 
 Что делает
@@ -40,6 +40,18 @@ Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=382794611
 
 Бесплатно, исходники открыты. Код пишет нейросеть, а с меня — постановка
 задач, тесты и время. Если мод сделал игру лучше: https://boosty.to/lrgpp
+
+Что нового в 1.1.1
+------------------
+* Добавлена китайская локализация (CN — упрощённый китайский и CH —
+  традиционный китайский) для всех настроек и подсказок в игре: настройки
+  песочницы хоста (Sandbox > ZombieSync MP) и личные настройки (Настройки >
+  Моды > ZombieSync MP), а также руководство README_CN.txt и страницы в
+  Steam Workshop.
+* Поправлено описание в 42/mod.info («отправляются в 4 раза чаще» в
+  соответствии с интервалом 50 мс по умолчанию вместо 200 мс).
+* Файл ZombieSyncMP.jar не менялся по сравнению с 1.1.0 (sha256: 53550c20...),
+  поэтому ZombieBuddy не запрашивает повторное подтверждение Java-мода.
 
 Что нового в 1.1.0
 ------------------
@@ -86,7 +98,7 @@ Steam Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id=382794611
 Через Steam Workshop: подпишитесь на ZombieBuddy и ZombieSync MP, на сервере
 добавьте ZombieSyncMP в Mods= (после ZombieBuddy) и 3827946115 в WorkshopItems=.
 
-Вручную (архив ZombieSyncMP_1.1.0.zip со страницы Releases на GitHub):
+Вручную (архив ZombieSyncMP_1.1.1.zip со страницы Releases на GitHub):
 1. Удалите старую папку ZombieSyncMP и распакуйте новую в %UserProfile%\Zomboid\mods\
 2. В настройках сервера добавьте ZombieSyncMP в Mods= (после ZombieBuddy).
 
@@ -205,8 +217,10 @@ TrippingZombies зомби, которых ведёт мод, так же точ
   https://steamcommunity.com/sharedfiles/filedetails/?id=3829140377
 * Download Unstuck — лечит зависание загрузки мастерской при запуске своего сервера:
   https://steamcommunity.com/sharedfiles/filedetails/?id=3829163351
-* A-Life: Reactive Survivors — NPC из A-Life отбиваются до укуса (тестовая версия):
+* A-Life: Reactive Survivors — NPC из A-Life отбиваются до укуса:
   https://steamcommunity.com/sharedfiles/filedetails/?id=3829332775
+* A-Life: Caravans — живые караваны фракций и торговля на дорогах для Project A-Life:
+  https://steamcommunity.com/sharedfiles/filedetails/?id=3829571361
 
 Важно
 -----
@@ -216,3 +230,5 @@ TrippingZombies зомби, которых ведёт мод, так же точ
   через интернет и подвисаний сервера. Исправления 1.1.0 сделаны по логам
   сервера, созданного из меню игры, страница настроек хоста там проверена;
   полной игры с другом на 1.1.0 ещё не было.
+
+© 2026 druidqwerty. Лицензия MIT.
