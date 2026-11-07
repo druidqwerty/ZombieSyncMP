@@ -21,7 +21,7 @@ Falls, hits, climbing over fences and through windows, getting up are played wit
 
 Client-side Java mod (requires ZombieBuddy). Every player must have it. If anything goes wrong it switches itself off and vanilla sync is used (`[ZombieSync] disabled ...` in the log).
 
-<p align="center"><a href="https://boosty.to/lrgpp"><img src="docs/banner.png" alt="LrgPP mods on Boosty" width="640"></a></p>
+<p align="center"><a href="https://boosty.to/lrgpp"><img src="https://raw.githubusercontent.com/druidqwerty/ZombieSyncMP/d9a8aed1f45f82971ba35db23d424a186283e995/docs/banner.png" alt="LrgPP mods on Boosty" width="640"></a></p>
 
 Free and open source. The code is written by an AI; the direction, the testing and the time are mine. If the mod made your game better: [support on Boosty](https://boosty.to/lrgpp).
 
