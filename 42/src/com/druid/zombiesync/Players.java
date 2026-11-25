@@ -1,5 +1,9 @@
 package com.druid.zombiesync;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -21,6 +25,7 @@ import zombie.characters.animals.IsoAnimal;
 import zombie.network.GameClient;
 import zombie.network.GameServer;
 import zombie.network.PacketTypes;
+import zombie.network.fields.character.Prediction;
 import zombie.network.packets.character.PlayerPacket;
 
 /**
@@ -46,6 +51,14 @@ public final class Players {
     private static final IdentityHashMap<Object, double[]> clocks = new IdentityHashMap<>();
     private static boolean sharing;
     private static volatile boolean failed;
+
+    // B42.21 used PlayerPacket.id (PlayerID) and byte Prediction.z; B42.22 renamed id -> player (ConnectionPlayer)
+    // and widened Prediction.z to float. Resolve both once so one JAR works on 42.21 and 42.22+.
+    private static final MethodHandle PACKET_PLAYER = findPacketPlayer();
+    private static final MethodHandle PREDICTION_FLOOR = findPredictionFloor();
+    // B42.22 added ladder climbing helpers on IsoGameCharacter; resolve optionally for 42.21 compatibility.
+    private static final MethodHandle PLAYER_CLIMBING_LADDER = findPlayerFlag("isClimbingLadder");
+    private static final MethodHandle PLAYER_CLIMBING_DOWN_LADDER = findPlayerFlag("isClimbingDownLadder");
 
     // owner side
     private static final long[] lastForcedMs = new long[4];
@@ -126,10 +139,96 @@ public final class Players {
         Prof.PLAYER_PARSE.add(t0);
     }
 
+    private static MethodHandle findPacketPlayer() {
+        MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+        try {
+            return lookup.findVirtual(PlayerPacket.class, "getPlayer", MethodType.methodType(IsoPlayer.class));
+        } catch (ReflectiveOperationException ignored) {
+        }
+        for (String name : new String[]{"player", "id"}) {
+            try {
+                Field f = PlayerPacket.class.getField(name);
+                MethodHandle getField = lookup.unreflectGetter(f);
+                MethodHandle getPlayer = lookup.findVirtual(f.getType(), "getPlayer", MethodType.methodType(IsoPlayer.class));
+                return MethodHandles.filterReturnValue(getField, getPlayer)
+                        .asType(MethodType.methodType(IsoPlayer.class, PlayerPacket.class));
+            } catch (ReflectiveOperationException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static int floatFloor(float z) {
+        return (int) Math.floor(z);
+    }
+
+    private static int doubleFloor(double z) {
+        return (int) Math.floor(z);
+    }
+
+    private static MethodHandle findPredictionFloor() {
+        MethodHandles.Lookup publicLookup = MethodHandles.publicLookup();
+        try {
+            Field f = Prediction.class.getField("z");
+            Class<?> t = f.getType();
+            MethodHandle getZ = publicLookup.unreflectGetter(f);
+            if (t == float.class) {
+                MethodHandle floor = MethodHandles.lookup().findStatic(Players.class, "floatFloor",
+                        MethodType.methodType(int.class, float.class));
+                return MethodHandles.filterReturnValue(getZ, floor);
+            }
+            if (t == byte.class || t == short.class || t == int.class) {
+                return getZ.asType(MethodType.methodType(int.class, Prediction.class));
+            }
+            if (t == double.class) {
+                MethodHandle floor = MethodHandles.lookup().findStatic(Players.class, "doubleFloor",
+                        MethodType.methodType(int.class, double.class));
+                return MethodHandles.filterReturnValue(getZ, floor);
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+        return null;
+    }
+
+    private static MethodHandle findPlayerFlag(String method) {
+        try {
+            return MethodHandles.publicLookup().findVirtual(IsoPlayer.class, method, MethodType.methodType(boolean.class));
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
+    static boolean invokeOptionalFlag(MethodHandle mh, IsoPlayer p) {
+        if (mh == null) return false;
+        try {
+            return (boolean) mh.invokeExact(p);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    static boolean hasLadderHandles() {
+        return PLAYER_CLIMBING_LADDER != null && PLAYER_CLIMBING_DOWN_LADDER != null;
+    }
+
+    static IsoPlayer packetPlayer(PlayerPacket pkt) throws Throwable {
+        if (PACKET_PLAYER == null) {
+            throw new NoSuchFieldError("PlayerPacket has neither getPlayer() nor player/id field");
+        }
+        return (IsoPlayer) PACKET_PLAYER.invokeExact(pkt);
+    }
+
+    static int predictionFloor(Prediction pred) throws Throwable {
+        if (PREDICTION_FLOOR == null) {
+            throw new NoSuchFieldError("Prediction.z field not found or unsupported type");
+        }
+        return (int) PREDICTION_FLOOR.invokeExact(pred);
+    }
+
     private static void beforePacket0(PlayerPacket pkt) {
         if (pkt == null || !active() || !Engine.receiverActive()) return;
         try {
-            IsoPlayer p = pkt.id.getPlayer();
+            IsoPlayer p = packetPlayer(pkt);
             if (p == null || p.isLocalPlayer() || p instanceof IsoAnimal) return;
             double now = Engine.serverNowMs();
             Track tr = tracks.get(p);
@@ -153,7 +252,7 @@ public final class Players {
             if (fresh) tr.blendFrom(p.getX(), p.getY(), p.getDirectionAngleRadians());
             tr.lastSeenMs = System.currentTimeMillis();
             if (smp.stamped) tr.stampedMs = tr.lastSeenMs;
-            tr.floor = pkt.prediction.z;
+            tr.floor = predictionFloor(pkt.prediction);
             tr.add(smp, now, Config.unstampedAgeMs);
         } catch (Throwable t) {
             fail("PlayerPacket.processClient", t);
@@ -161,9 +260,12 @@ public final class Players {
     }
 
     /** States in which the copy only stands, walks, runs, aims, swings or reacts to a hit: its position comes from the buffer. */
-    private static boolean drivable(IsoPlayer p) {
+    static boolean drivable(IsoPlayer p) {
         if (p.isDead() || p.getVehicle() != null || p.isOnFloor() || p.isRagdoll() || p.isBeingGrappled() || p.isGrappling()
-                || p.isPerformingGrappleAnimation() || p.isDraggingCorpse()) {
+                || p.isPerformingGrappleAnimation() || p.isDraggingCorpse()
+                || p.isClimbing() || p.isSittingOnFurniture() || p.isSitOnGround()
+                || invokeOptionalFlag(PLAYER_CLIMBING_LADDER, p)
+                || invokeOptionalFlag(PLAYER_CLIMBING_DOWN_LADDER, p)) {
             return false;
         }
         State st = p.getCurrentState();

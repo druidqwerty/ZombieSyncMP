@@ -37,10 +37,10 @@ import zombie.network.packets.character.ZombieSynchronizationPacket;
  * are synchronized for that.
  */
 public final class Engine {
-    static final String VERSION = "1.1.0";
+    static final String VERSION = "1.1.2";
     static final String TAG = "[ZombieSync] ";
     static final long VANILLA_NEIGHBOR_PERIOD = 200L;
-    static final int PACKET_BYTES = 53;
+    static final int PACKET_BYTES = 56;
 
     private static final Map<IsoZombie, Track> tracks = Collections.synchronizedMap(new WeakHashMap<>());
     /** remote zombies the owner told to eat (EatBody packet); any other eating on a remote zombie is ours to undo */
@@ -291,6 +291,8 @@ public final class Engine {
             if (fresh) tr.blendFrom(z.getX(), z.getY(), z.getDirectionAngleRadians());
             tr.lastSeenMs = System.currentTimeMillis();
             tr.floor = pkt.realZ;
+            tr.ownerDead = pkt.health <= 0;
+            tr.ownerStateOk = isDrivableRealState(pkt.realState);
             if (Config.fixEating && z.getEatBodyTarget() != null && !ownerEating.containsKey(z)) {
                 z.setEatBodyTarget(null, false); // started eating on its own (before the mod was on, or not ours to block)
                 staleEatCleared++;
@@ -325,7 +327,7 @@ public final class Engine {
             IsoZombie z = ai.zombie;
             if (z == null) return;
             float dx = z.getX() - parseX, dy = z.getY() - parseY;
-            if (!drivesPose(z)) {
+            if (!drivesPose(z, tracks.get(z))) {
                 if (dx * dx + dy * dy > 0.25f) vanillaTeleports++; // during a local animation vanilla's teleport stands
                 return;
             }
@@ -360,10 +362,37 @@ public final class Engine {
         }
     }
 
+    static boolean isDrivableRealState(NetworkVariables.ZombieState rs) {
+        if (rs == null) return true;
+        switch (rs) {
+            case WalkTowardNetwork:
+            case Idle:
+            case LungeNetwork:
+            case AttackNetwork:
+            case PathFind:
+            case FaceTarget:
+            case TurnAlerted:
+            case Thump:
+            case WalkToward:
+            case Lunge:
+            case Attack:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     /** States in which a remote zombie only walks, turns, stands or attacks: its pose comes from the buffer. */
-    private static boolean drivesPose(IsoZombie z) {
-        if (!z.isRemoteZombie() || z.isDead() || z.isOnFloor() || z.isRagdoll() || z.isBeingGrappled()
-                || z.isReanimatedForGrappleOnly() || z.getVehicle() != null) {
+    static boolean drivesPose(IsoZombie z, Track tr) {
+        if (!z.isRemoteZombie() || z.isDead() || z.getHealth() <= 0f || z.isOnFloor() || z.isRagdoll()
+                || z.isBeingGrappled() || z.isReanimatedForGrappleOnly() || z.getVehicle() != null
+                || z.isFakeDead() || z.isKnockedDown() || z.isSitAgainstWall()) {
+            return false;
+        }
+        if (tr != null && (tr.ownerDead || !tr.ownerStateOk)) {
+            return false;
+        }
+        if (!isDrivableRealState(z.realState)) {
             return false;
         }
         State st = z.getCurrentState();
@@ -391,7 +420,7 @@ public final class Engine {
                 return;
             }
             tr.lastSeenMs = System.currentTimeMillis();
-            if (!drivesPose(z) || (int) Math.floor(z.getZ()) != tr.floor) {
+            if (!drivesPose(z, tr) || (int) Math.floor(z.getZ()) != tr.floor) {
                 // a local animation moves it (hit reaction, climbing, falling, getting up, eating), or it is
                 // on another floor than the owner's (stairs, vanilla will move it): keep buffering and blend
                 // back in from wherever it ends up
@@ -510,7 +539,7 @@ public final class Engine {
         try {
             if (!z.isRemoteZombie() || z.getTarget() == null || z.isBumped() || !ownerAttacking(z)) return vanilla;
             Track tr = tracks.get(z);
-            return tr != null && tr.n > 0 && !tr.idle && drivesPose(z);
+            return tr != null && tr.n > 0 && !tr.idle && drivesPose(z, tr);
         } catch (Throwable t) {
             fail("IsoZombie.isFacingTarget", t);
             return vanilla;

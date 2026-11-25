@@ -63,6 +63,8 @@ final class Track {
     boolean driving;     // the buffer placed the character this frame
     boolean jumped;      // this frame's pose jumped instead of moving (a teleport, a gap with no data): place it there
     int lastMode = -1;
+    boolean ownerDead;       // the owner's latest packet reported health <= 0
+    boolean ownerStateOk = true; // the owner's latest realState is a drivable standing/attacking state
 
     // the next pose starts from where the zombie is drawn (activation, end of a local animation)
     private boolean blendPending;
@@ -139,6 +141,8 @@ final class Track {
         idle = false;
         blendPending = false;
         snapPending = false;
+        ownerDead = false;
+        ownerStateOk = true;
     }
 
     /** The drawn time starts over from the target delay (the curve is broken anyway). */
